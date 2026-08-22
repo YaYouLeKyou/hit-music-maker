@@ -27,7 +27,12 @@ const GROQ_MODEL = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
 // --- Configuration Suno (API non-officielle type sunoapi.org / apibox) ---
 const SUNO_API_BASE = process.env.SUNO_API_BASE || "https://api.sunoapi.org/api/v1";
 const SUNO_API_KEY = process.env.SUNO_API_KEY || "";
-const SUNO_MODEL = process.env.SUNO_MODEL || "v4";
+const SUNO_MODEL = process.env.SUNO_MODEL || "V4";
+
+// --- Configuration Udio (fallback - udioapi.pro) ---
+const UDIO_API_BASE = process.env.UDIO_API_BASE || "https://udioapi.pro/api";
+const UDIO_API_KEY = process.env.UDIO_API_KEY || "";
+const UDIO_MODEL = process.env.UDIO_MODEL || "chirp-v4-5";
 
 const SYSTEM_PROMPT = [
     "Tu es un directeur artistique et auteur-compositeur à succès.",
@@ -182,6 +187,17 @@ app.post("/api/suno/generate", async (req, res) => {
         const data = await sunoResponse.json().catch(() => null);
 
         if (!sunoResponse.ok || !data || data.code !== 200) {
+            // Messages d'erreur explicites selon le code renvoyé par Suno
+            if (data && data.code === 429) {
+                return res.status(402).json({
+                    error: "Crédits Suno insuffisants. Rechargez votre compte sur le portail de votre fournisseur d'API Suno puis réessayez."
+                });
+            }
+            if (data && /model/i.test(data.msg || "")) {
+                return res.status(502).json({
+                    error: `Modèle Suno invalide (${SUNO_MODEL}). Valeurs acceptées : V3_5, V4_5ALL, V4, V4_5, V4_5PLUS, V5 ou V5_5 (configurable via SUNO_MODEL dans .env).`
+                });
+            }
             const msg = data?.msg || `réponse inattendue (${sunoResponse.status})`;
             return res.status(502).json({ error: `Erreur API Suno : ${msg}` });
         }
@@ -244,6 +260,124 @@ app.get("/api/suno/status/:taskId", async (req, res) => {
         res.json({ status: d.status || "UNKNOWN", tracks });
     } catch (err) {
         console.error("[suno] Erreur status :", err);
+        res.status(500).json({ error: "Erreur interne du serveur : " + err.message });
+    }
+});
+
+/**
+ * Route POST /api/udio/generate
+ * Body attendu : { title: string, stylePrompt: string, lyrics: string }
+ * Soumet la génération musicale à Udio (udioapi.pro) et renvoie { taskId }.
+ * Utilisé automatiquement en fallback si Suno échoue.
+ */
+app.post("/api/udio/generate", async (req, res) => {
+    try {
+        if (!UDIO_API_KEY) {
+            return res.status(400).json({ error: "UDIO_API_KEY manquante dans le fichier .env du serveur." });
+        }
+
+        const { title, stylePrompt, lyrics } = req.body || {};
+
+        if ((!lyrics || !lyrics.trim()) && (!stylePrompt || !stylePrompt.trim())) {
+            return res.status(400).json({ error: "Lyrics ou Style Prompt requis pour générer la musique." });
+        }
+
+        const udioResponse = await fetch(`${UDIO_API_BASE}/v2/generate`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${UDIO_API_KEY}`
+            },
+            body: JSON.stringify({
+                model: UDIO_MODEL,
+                prompt: String(lyrics || "").slice(0, 5000),
+                style: String(stylePrompt || "").slice(0, 1000),
+                title: String(title || "Sans titre").slice(0, 80),
+                make_instrumental: false
+            })
+        });
+
+        const data = await udioResponse.json().catch(() => null);
+
+        if (!udioResponse.ok || !data || data.code !== 200) {
+            if (data && data.code === 401) {
+                return res.status(401).json({ error: "Clé API Udio invalide ou expirée." });
+            }
+            const msg = data?.message || `réponse inattendue (${udioResponse.status})`;
+            return res.status(502).json({ error: `Erreur API Udio : ${msg}` });
+        }
+
+        const taskId = data?.data?.task_id || data?.workId;
+        if (!taskId) {
+            return res.status(502).json({ error: "Udio n'a pas renvoyé de taskId (workId)." });
+        }
+
+        console.log(`[udio] Tâche soumise : ${taskId}`);
+        res.json({ taskId });
+    } catch (err) {
+        console.error("[udio] Erreur generate :", err);
+        res.status(500).json({ error: "Erreur interne du serveur : " + err.message });
+    }
+});
+
+/**
+ * Route GET /api/udio/status/:taskId
+ * Interroge le statut de la tâche Udio (feed) et renvoie les pistes audio si prêtes.
+ * Réponse normalisée identique à /api/suno/status : { status, tracks }.
+ */
+app.get("/api/udio/status/:taskId", async (req, res) => {
+    try {
+        if (!UDIO_API_KEY) {
+            return res.status(400).json({ error: "UDIO_API_KEY manquante dans le fichier .env du serveur." });
+        }
+
+        const { taskId } = req.params;
+        if (!taskId) {
+            return res.status(400).json({ error: "taskId requis." });
+        }
+
+        const udioResponse = await fetch(
+            `${UDIO_API_BASE}/v2/feed?workId=${encodeURIComponent(taskId)}`,
+            { headers: { Authorization: `Bearer ${UDIO_API_KEY}` } }
+        );
+
+        const data = await udioResponse.json().catch(() => null);
+
+        if (!udioResponse.ok || !data || data.code !== 200) {
+            const msg = data?.message || `réponse inattendue (${udioResponse.status})`;
+            return res.status(502).json({ error: `Erreur API Udio : ${msg}` });
+        }
+
+        const d = data.data || {};
+        const items = Array.isArray(d.response_data) ? d.response_data : [];
+
+        // Détection d'échec (modération, contenu inapproprié…)
+        const failedItem = items.find((t) => t.fail_message || t.error_message);
+        if (failedItem) {
+            return res.json({
+                status: "FAILED",
+                tracks: [],
+                detail: failedItem.fail_message || failedItem.error_message
+            });
+        }
+
+        const tracks = items
+            .filter((t) => t.audio_url)
+            .map((t) => ({
+                id: t.id || "",
+                title: t.title || "Sans titre",
+                audioUrl: t.audio_url,
+                streamAudioUrl: t.audio_url,
+                duration: typeof t.duration === "number" ? t.duration : null
+            }));
+
+        // Génération terminée quand tous les segments ont leur audio
+        const allDone = items.length > 0 && items.every((t) => t.audio_url);
+        const status = d.type === "SUCCESS" && allDone ? "SUCCESS" : "PROCESSING";
+
+        res.json({ status, tracks });
+    } catch (err) {
+        console.error("[udio] Erreur status :", err);
         res.status(500).json({ error: "Erreur interne du serveur : " + err.message });
     }
 });

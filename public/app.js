@@ -415,14 +415,48 @@ function hideGenError() {
 
 let sunoPollTimer = null;
 
-function setMusicStatus(text) {
+/** Étapes affichées dans le loader pendant la génération Suno */
+const SUNO_STEPS = [
+    "Envoi du morceau à Suno",
+    "Écriture et composition de la chanson",
+    "Enregistrement des voix et des instruments",
+    "Mixage et mastering de votre hit",
+    "Préparation du lecteur audio"
+];
+
+/** Affiche/masque le loader et met à jour texte + barre de progression */
+function setMusicStatus(text, percent) {
     const el = $("music-status");
     if (!text) {
         el.classList.add("hidden");
         return;
     }
     $("music-status-text").textContent = text;
+    const bar = $("music-progress-bar");
+    const p = Math.max(0, Math.min(100, percent || 0));
+    bar.style.width = p + "%";
     el.classList.remove("hidden");
+}
+
+/** Met à jour la liste des étapes (terminées / en cours / à venir) */
+function renderSunoSteps(currentIndex) {
+    const ul = $("music-steps");
+    ul.innerHTML = SUNO_STEPS.map((label, i) => {
+        let icon, cls;
+        if (i < currentIndex) {
+            icon = "fa-circle-check";
+            cls = "text-emerald-400";
+        } else if (i === currentIndex) {
+            icon = "fa-spinner fa-spin";
+            cls = "text-fuchsia-400";
+        } else {
+            icon = "fa-circle";
+            cls = "text-gray-600";
+        }
+        return `<li class="flex items-center gap-2 ${i === currentIndex ? "text-gray-100 font-semibold" : i < currentIndex ? "text-gray-400" : "text-gray-500"}">
+            <i class="fa-solid ${icon} ${cls} w-4"></i><span>${escapeHtml(label)}</span>
+        </li>`;
+    }).join("");
 }
 
 /** Dérive un titre de morceau depuis le thème ou la première ligne des paroles */
@@ -433,7 +467,7 @@ function deriveSongTitle() {
     return firstLine ? firstLine.slice(0, 60) : "Sans titre";
 }
 
-/** Soumet le morceau (style + paroles) à Suno puis lance le suivi */
+/** Soumet le morceau à Suno puis, en cas d'échec, bascule automatiquement sur Udio */
 async function generateMusicOnSuno() {
     const lyrics = buildLyricsPrompt();
     const style = state.stylePrompt.trim();
@@ -446,81 +480,128 @@ async function generateMusicOnSuno() {
     const btn = $("btn-generate-music");
     btn.disabled = true;
     $("music-result").innerHTML = "";
-    setMusicStatus("Envoi du morceau à Suno…");
+    renderSunoSteps(0);
+    setMusicStatus("Étape 1/5 — Envoi du morceau à Suno…", 5);
 
+    const payload = { title: deriveSongTitle(), stylePrompt: style, lyrics };
+    let provider = "suno";
+    let taskId = null;
+    let sunoError = null;
+
+    // --- Tentative 1 : Suno ---
     try {
         const res = await fetch("/api/suno/generate", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ title: deriveSongTitle(), stylePrompt: style, lyrics })
+            body: JSON.stringify(payload)
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Erreur lors de l'envoi à Suno.");
-
-        setMusicStatus("Musique en cours de génération par Suno (1 à 3 minutes)…");
-        pollSunoStatus(data.taskId, 0);
+        taskId = data.taskId;
     } catch (err) {
-        setMusicStatus(null);
-        btn.disabled = false;
-        toast(err.message || "Échec de la génération Suno.", "error");
+        sunoError = err.message || "Erreur Suno inconnue";
     }
+
+    // --- Fallback : Udio (si Suno a échoué) ---
+    if (!taskId) {
+        provider = "udio";
+        renderSunoSteps(0);
+        setMusicStatus("Suno indisponible — bascule automatique vers Udio…", 8);
+        try {
+            const res2 = await fetch("/api/udio/generate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            });
+            const data2 = await res2.json();
+            if (!res2.ok) throw new Error(data2.error || "Erreur lors de l'envoi à Udio.");
+            taskId = data2.taskId;
+        } catch (err2) {
+            setMusicStatus(null);
+            btn.disabled = false;
+            const msg = "Échec sur les deux fournisseurs." + NL + "• Suno : " + (sunoError || "?") + NL + "• Udio : " + (err2.message || "?");
+            showMusicError(msg);
+            toast("Échec de la génération sur Suno et Udio.", "error");
+            return;
+        }
+    }
+
+    renderSunoSteps(1);
+    setMusicStatus("Musique en cours de génération par " + (provider === "udio" ? "Udio" : "Suno") + " (1 à 3 minutes)…", 15);
+    pollMusicStatus(taskId, 0, provider);
 }
 
-/** Interroge périodiquement le statut de la tâche Suno jusqu'à obtention de l'audio */
-function pollSunoStatus(taskId, attempt) {
+/** Interroge périodiquement le statut de la tâche (Suno ou Udio) jusqu'à obtention de l'audio */
+function pollMusicStatus(taskId, attempt, provider) {
     const MAX_ATTEMPTS = 50; // ~5 minutes à 6 s d'intervalle
 
     if (attempt >= MAX_ATTEMPTS) {
-        finishSunoPolling(false, "Délai dépassé : la génération prend trop de temps.");
+        finishSunoPolling(false, "Délai dépassé : la génération prend trop de temps.", null, provider);
         return;
     }
 
-    fetch("/api/suno/status/" + encodeURIComponent(taskId))
+    fetch(`/api/${provider}/status/` + encodeURIComponent(taskId))
         .then(r => r.json())
         .then(data => {
             if (data.error) throw new Error(data.error);
 
             if (data.status === "SUCCESS") {
                 if (data.tracks && data.tracks.length > 0) {
-                    finishSunoPolling(true, null, data.tracks);
+                    finishSunoPolling(true, null, data.tracks, provider);
                 } else {
-                    finishSunoPolling(false, "Génération terminée mais aucune piste audio retournée.");
+                    finishSunoPolling(false, "Génération terminée mais aucune piste audio retournée.", null, provider);
                 }
                 return;
             }
 
             if (/FAILED|ERROR/i.test(data.status)) {
-                finishSunoPolling(false, "La génération a échoué côté Suno (" + data.status + ").");
+                const detail = data.detail ? " — " + data.detail : "";
+                finishSunoPolling(false, "La génération a échoué côté " + (provider === "udio" ? "Udio" : "Suno") + " (" + data.status + ")" + detail + ".", provider);
                 return;
             }
+
+            // Progression estimée : 15% -> 95% sur ~5 minutes
+            const percent = Math.min(95, 15 + attempt * 2);
+            const stepIndex = percent >= 75 ? 3 : percent >= 45 ? 2 : 1;
+            renderSunoSteps(stepIndex);
 
             const elapsed = attempt * 6;
             const mm = Math.floor(elapsed / 60);
             const ss = String(elapsed % 60).padStart(2, "0");
-            setMusicStatus("Génération en cours… (" + mm + ":" + ss + ")");
-            sunoPollTimer = setTimeout(() => pollSunoStatus(taskId, attempt + 1), 6000);
+            setMusicStatus("Génération en cours via " + (provider === "udio" ? "Udio" : "Suno") + "… (" + mm + ":" + ss + ") — vos pistes arrivent bientôt !", percent);
+            sunoPollTimer = setTimeout(() => pollMusicStatus(taskId, attempt + 1, provider), 6000);
         })
-        .catch(err => finishSunoPolling(false, err.message || "Erreur pendant le suivi de la génération."));
+        .catch(err => finishSunoPolling(false, err.message || "Erreur pendant le suivi de la génération.", provider));
 }
 
-function finishSunoPolling(success, errorMsg, tracks) {
+/** Affiche une erreur de génération dans la zone de résultat */
+function showMusicError(message) {
+    $("music-result").innerHTML =
+        '<div class="rounded-xl bg-red-500/10 border border-red-500/50 p-4 text-sm text-red-300">' +
+        '<i class="fa-solid fa-triangle-exclamation mr-2"></i>' + escapeHtml(message) + "</div>";
+}
+
+function finishSunoPolling(success, errorMsg, tracks, provider) {
     clearTimeout(sunoPollTimer);
     $("btn-generate-music").disabled = false;
 
     if (!success) {
         setMusicStatus(null);
+        showMusicError(errorMsg || "Échec de la génération.");
         toast(errorMsg || "Échec de la génération.", "error");
         return;
     }
 
-    setMusicStatus(null);
-    renderMusicTracks(tracks);
-    saveSongWithTracks(tracks);
-    toast("Musique générée et sauvegardée dans l'historique ! 🎧");
+    renderSunoSteps(SUNO_STEPS.length);
+    setMusicStatus("Votre musique est prête ! 🎉", 100);
+    setTimeout(() => setMusicStatus(null), 1500);
+    renderMusicTracks(tracks, provider);
+    saveSongWithTracks(tracks, provider);
+    toast("Musique générée via " + (provider === "udio" ? "Udio" : "Suno") + " et sauvegardée ! 🎧");
 }
 
 /** Affiche les pistes générées avec bouton play / pause */
-function renderMusicTracks(tracks) {
+function renderMusicTracks(tracks, provider) {
     const container = $("music-result");
     container.innerHTML = "";
 
@@ -538,7 +619,7 @@ function renderMusicTracks(tracks) {
             </button>
             <div class="flex-1 min-w-0">
                 <p class="font-bold text-sm truncate">${escapeHtml(track.title || "Piste " + (i + 1))}</p>
-                <p class="text-xs text-gray-400">${track.duration ? Math.round(track.duration) + " s · " : ""}Généré par Suno</p>
+                <p class="text-xs text-gray-400">${track.duration ? Math.round(track.duration) + " s · " : ""}Généré par ${provider === "udio" ? "Udio" : "Suno"}</p>
             </div>
             <a href="${escapeHtml(url)}" target="_blank" rel="noopener" download title="Télécharger"
                class="w-9 h-9 rounded-lg bg-purple-900/60 hover:bg-purple-700 flex items-center justify-center text-sm transition">
@@ -563,10 +644,11 @@ function renderMusicTracks(tracks) {
 }
 
 /** Sauvegarde automatiquement le morceau généré (avec pistes audio) dans l'historique */
-function saveSongWithTracks(tracks) {
+function saveSongWithTracks(tracks, provider) {
     const song = {
         id: Date.now() + "-" + Math.random().toString(36).slice(2, 8),
         date: new Date().toISOString(),
+        provider: provider === "udio" ? "udio" : "suno",
         stylePrompt: state.stylePrompt.trim(),
         blocks: state.blocks.map(b => ({ type: b.type, text: b.text })),
         tracks: tracks.map(t => ({
