@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Music Hit Maker Studio</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        .block-card { transition: transform 0.15s ease, box-shadow 0.15s ease; }
+        .block-card:hover { transform: translateY(-2px); }
+        .drag-over { border-color: #a78bfa !important; background: rgba(167, 139, 250, 0.08); }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #1e1b31; }
+        ::-webkit-scrollbar-thumb { background: #4c3f91; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #6d5bb5; }
+        textarea { resize: vertical; }
+        @keyframes pulseGlow {
+            0%, 100% { box-shadow: 0 0 12px rgba(139, 92, 246, 0.3); }
+            50% { box-shadow: 0 0 28px rgba(139, 92, 246, 0.65); }
+        }
+        .generating { animation: pulseGlow 1.4s ease-in-out infinite; }
+    </style>
+</head>
+<body class="bg-[#12101f] text-gray-100 min-h-screen font-sans">
+
+    <!-- ==================== EN-TÊTE ==================== -->
+    <header class="sticky top-0 z-40 bg-[#181430]/95 backdrop-blur border-b border-purple-900/50 shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-4 flex-wrap">
+            <div class="flex items-center gap-3">
+                <div class="w-11 h-11 rounded-xl bg-gradient-to-br from-fuchsia-500 to-purple-700 flex items-center justify-center shadow-md">
+                    <i class="fa-solid fa-music text-white text-lg"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold tracking-tight bg-gradient-to-r from-fuchsia-400 to-purple-300 bg-clip-text text-transparent">Music Hit Maker Studio</h1>
+                    <p class="text-xs text-gray-400">Composez · Structurez · Générez vos prompts Suno / Udio</p>
+                </div>
+            </div>
+
+            <!-- Navigation -->
+            <nav class="flex items-center gap-2">
+                <button id="tab-studio" class="tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition bg-purple-600 text-white shadow">
+                    <i class="fa-solid fa-sliders mr-1"></i> Studio
+                </button>
+                <button id="tab-history" class="tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition bg-transparent text-gray-300 hover:bg-purple-900/40">
+                    <i class="fa-solid fa-clock-rotate-left mr-1"></i> Historique
+                    <span id="history-count" class="ml-1 inline-flex items-center justify-center min-w-[20px] h-5 px-1 rounded-full bg-fuchsia-500 text-[11px] font-bold">0</span>
+                </button>
+            </nav>
+
+            <!-- ============================================================
+                 [FONCTIONNALITÉ COMMENTÉE] Gestion de la clé API Groq côté client.
+                 La clé est actuellement chargée depuis le fichier .env du serveur.
+                 Pour réactiver la saisie de clé dans l'interface (multi-utilisateurs),
+                 décommentez ce bloc ainsi que les sections correspondantes dans app.js.
+            ============================================================= -->
+            <!--
+            <button id="btn-api-key" class="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium border transition
+                       border-red-500/60 bg-red-500/10 text-red-300 hover:bg-red-500/20" title="Configurer la clé API Groq">
+                <i class="fa-solid fa-key"></i>
+                <span id="api-key-label">Clé API manquante</span>
+            </button>
+            -->
+        </div>
+
+        <!-- Bandeau d'avertissement clé manquante (commenté : clé fournie via .env) -->
+        <!--
+        <div id="api-warning-banner" class="hidden bg-gradient-to-r from-amber-600/30 to-orange-600/20 border-t border-amber-500/40 px-4 py-2 text-sm text-amber-200">
+            <div class="max-w-7xl mx-auto flex items-center justify-between gap-3">
+                <span><i class="fa-solid fa-triangle-exclamation mr-2"></i>Aucune clé API Groq configurée. Cliquez sur « Clé API » pour en saisir une avant de générer.</span>
+                <button onclick="openApiKeyModal()" class="px-3 py-1 rounded-md bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold whitespace-nowrap">Configurer</button>
+            </div>
+        </div>
+        -->
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 py-6">
+
+        <!-- ================================================== -->
+        <!-- ==================== VUE STUDIO =================== -->
+        <!-- ================================================== -->
+        <section id="view-studio" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+            <!-- ---------- Colonne gauche : Génération IA + Style ---------- -->
+            <div class="lg:col-span-1 space-y-6">
+
+                <!-- Génération intelligente Groq -->
+                <div class="rounded-2xl bg-[#1c1836] border border-purple-800/60 p-5 shadow-xl">
+                    <h2 class="text-lg font-bold mb-1"><i class="fa-solid fa-wand-magic-sparkles text-fuchsia-400 mr-2"></i>Génération IA (Groq)</h2>
+                    <p class="text-xs text-gray-400 mb-4">Laissez l'IA composer la structure et le style pour vous.</p>
+
+                    <label class="block text-sm font-medium text-gray-300 mb-1">Thème du morceau *</label>
+                    <textarea id="gen-theme" rows="3" placeholder="Ex : un été à Paris, amour de vacances, ambiance nostalgique…"
+                        class="w-full rounded-lg bg-[#12101f] border border-purple-800/70 focus:border-fuchsia-500 outline-none p-3 text-sm placeholder-gray-600"></textarea>
+
+                    <label class="block text-sm font-medium text-gray-300 mt-3 mb-1">Style cible (optionnel)</label>
+                    <input id="gen-style" type="text" placeholder="Ex : Afro-pop français, style Aya Nakamura"
+                        class="w-full rounded-lg bg-[#12101f] border border-purple-800/70 focus:border-fuchsia-500 outline-none p-3 text-sm placeholder-gray-600">
+
+                    <button id="btn-generate"
+                        class="mt-4 w-full py-3 rounded-xl font-bold text-white bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500 transition shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">
+                        <i class="fa-solid fa-bolt mr-2"></i>Générer avec l'IA
+                    </button>
+
+                    <div id="gen-error" class="hidden mt-3 rounded-lg bg-red-500/15 border border-red-500/50 text-red-300 text-sm p-3"></div>
+                </div>
+
+                <!-- Style Prompt -->
+                <div class="rounded-2xl bg-[#1c1836] border border-purple-800/60 p-5 shadow-xl">
+                    <h2 class="text-lg font-bold mb-1"><i class="fa-solid fa-tags text-cyan-400 mr-2"></i>Style Prompt</h2>
+                    <p class="text-xs text-gray-400 mb-4">Tags optimisés Suno / Udio : genre, BPM, instruments, voix.</p>
+
+                    <textarea id="style-prompt" rows="4" placeholder="Ex : afro-pop, 102 BPM, female vocals, catchy melody, log drum, french lyrics…"
+                        class="w-full rounded-lg bg-[#12101f] border border-purple-800/70 focus:border-cyan-500 outline-none p-3 text-sm placeholder-gray-600"></textarea>
+
+                    <p class="text-xs text-gray-500 mt-3 mb-2 font-medium">Styles rapides :</p>
+                    <div id="preset-buttons" class="flex flex-wrap gap-2"></div>
+                </div>
+
+                <!-- Aperçu Lyrics Prompt -->
+                <div class="rounded-2xl bg-[#1c1836] border border-purple-800/60 p-5 shadow-xl">
+                    <div class="flex items-center justify-between mb-3">
+                        <h2 class="text-lg font-bold"><i class="fa-solid fa-file-lines text-emerald-400 mr-2"></i>Lyrics Prompt</h2>
+                        <button id="btn-copy-preview" class="text-xs px-3 py-1.5 rounded-lg bg-emerald-600/80 hover:bg-emerald-500 text-white font-semibold transition">
+                            <i class="fa-regular fa-copy mr-1"></i>Copier
+                        </button>
+                    </div>
+                    <pre id="lyrics-preview" class="whitespace-pre-wrap text-sm bg-[#12101f] rounded-lg border border-purple-900/60 p-4 max-h-72 overflow-y-auto text-gray-300 leading-relaxed"></pre>
+                </div>
+            </div>
+
+            <!-- ---------- Colonne droite : Éditeur de blocs ---------- -->
+            <div class="lg:col-span-2 space-y-4">
+                <div class="rounded-2xl bg-[#1c1836] border border-purple-800/60 p-5 shadow-xl">
+                    <div class="flex items-center justify-between flex-wrap gap-3 mb-4">
+                        <h2 class="text-lg font-bold"><i class="fa-solid fa-layer-group text-purple-400 mr-2"></i>Structure du morceau</h2>
+                        <div class="flex items-center gap-2">
+                            <select id="new-block-type" class="rounded-lg bg-[#12101f] border border-purple-800/70 px-3 py-2 text-sm outline-none focus:border-fuchsia-500">
+                                <option value="Intro">Intro</option>
+                                <option value="Couplet 1">Couplet 1</option>
+                                <option value="Couplet 2">Couplet 2</option>
+                                <option value="Pré-refrain">Pré-refrain</option>
+                                <option value="Refrain">Refrain</option>
+                                <option value="Pont">Pont</option>
+                                <option value="Outro">Outro</option>
+                            </select>
+                            <button id="btn-add-block" class="px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-sm font-semibold transition">
+                                <i class="fa-solid fa-plus mr-1"></i>Ajouter un bloc
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="blocks-container" class="space-y-3"></div>
+
+                    <div id="blocks-empty" class="hidden text-center py-10 text-gray-500">
+                        <i class="fa-solid fa-compact-disc text-4xl mb-3 opacity-40 animate-spin-slow"></i>
+                        <p class="text-sm">Aucun bloc pour l'instant.<br>Ajoutez une section ou générez avec l'IA.</p>
+                    </div>
+
+                    <!-- Actions morceau -->
+                    <div class="mt-5 pt-4 border-t border-purple-900/60 flex flex-wrap gap-2">
+                        <button id="btn-save-song" class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-sm font-semibold transition">
+                            <i class="fa-solid fa-floppy-disk mr-1"></i>Sauvegarder dans l'historique
+                        </button>
+                        <button id="btn-clear-studio" class="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-sm font-semibold transition">
+                            <i class="fa-solid fa-broom mr-1"></i>Vider le studio
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ---------- CTA final : Générer ma musique (via Suno) ---------- -->
+            <div class="lg:col-span-3 mt-2 rounded-2xl bg-gradient-to-r from-fuchsia-800/40 via-purple-800/30 to-indigo-800/40 border border-fuchsia-500/50 p-8 text-center shadow-2xl">
+                <h2 class="text-2xl font-bold mb-2 bg-gradient-to-r from-fuchsia-300 to-cyan-300 bg-clip-text text-transparent">
+                    <i class="fa-solid fa-rocket mr-2"></i>Prêt à lancer votre hit ?
+                </h2>
+                <p class="text-sm text-gray-300 mb-5">Le style et les paroles sont envoyés automatiquement à Suno. La musique générée apparaîtra ici avec un bouton play.</p>
+                <button id="btn-generate-music"
+                    class="inline-flex items-center gap-3 px-10 py-4 rounded-2xl text-lg font-extrabold text-white bg-gradient-to-r from-fuchsia-600 via-purple-600 to-indigo-600 hover:from-fuchsia-500 hover:via-purple-500 hover:to-indigo-500 transition shadow-[0_0_30px_rgba(217,70,239,0.45)] hover:shadow-[0_0_45px_rgba(217,70,239,0.7)] hover:scale-[1.03] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100">
+                    <i class="fa-solid fa-wand-magic-sparkles text-xl"></i>Générer ma musique
+                </button>
+
+                <!-- Statut de génération Suno -->
+                <div id="music-status" class="hidden mt-6 text-sm text-fuchsia-200">
+                    <i class="fa-solid fa-spinner fa-spin mr-2"></i><span id="music-status-text">Envoi à Suno…</span>
+                </div>
+
+                <!-- Résultat : pistes audio générées -->
+                <div id="music-result" class="mt-6 space-y-3 text-left"></div>
+
+                <!-- [FONCTIONNALITÉ COMMENTÉE] Liens manuels vers les générateurs.
+                     Udio est conservé pour un usage futur. -->
+                <!--
+                <div class="flex items-center justify-center gap-4 mt-5 text-sm">
+                    <a href="https://www.udio.com/create" target="_blank" rel="noopener"
+                        class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 transition">
+                        <i class="fa-solid fa-headphones text-cyan-400"></i>Ouvrir Udio <i class="fa-solid fa-arrow-up-right-from-square text-xs opacity-60"></i>
+                    </a>
+                </div>
+                -->
+            </div>
+        </section>
+
+        <!-- ================================================== -->
+        <!-- ================= VUE HISTORIQUE ================== -->
+        <!-- ================================================== -->
+        <section id="view-history" class="hidden">
+            <div class="flex items-center justify-between mb-5">
+                <h2 class="text-2xl font-bold"><i class="fa-solid fa-clock-rotate-left text-fuchsia-400 mr-2"></i>Historique des créations</h2>
+                <button id="btn-clear-history" class="px-4 py-2 rounded-lg bg-red-600/80 hover:bg-red-500 text-sm font-semibold transition">
+                    <i class="fa-solid fa-trash-can mr-1"></i>Tout supprimer
+                </button>
+            </div>
+            <div id="history-container" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"></div>
+            <div id="history-empty" class="hidden text-center py-16 text-gray-500">
+                <i class="fa-solid fa-record-vinyl text-5xl mb-4 opacity-40"></i>
+                <p class="text-sm">Aucun morceau sauvegardé.<br>Créez votre premier hit dans le Studio !</p>
+            </div>
+        </section>
+    </main>
+
+    <!-- ==================== MODALE CLÉ API (commentée : clé fournie via .env) ==================== -->
+    <!--
+    <div id="modal-api-key" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+        <div class="w-full max-w-md rounded-2xl bg-[#1c1836] border border-purple-700/70 shadow-2xl p-6">
+            <div class="flex items-start justify-between mb-4">
+                <h3 class="text-lg font-bold"><i class="fa-solid fa-key text-amber-400 mr-2"></i>Clé API Groq</h3>
+                <button onclick="closeApiKeyModal()" class="text-gray-400 hover:text-white transition"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+            <p class="text-sm text-gray-400 mb-4">
+                Votre clé est stockée <strong class="text-gray-200">uniquement dans votre navigateur</strong> (localStorage) et n'est envoyée qu'au serveur local pour appeler Groq.
+                Obtenez une clé gratuite sur <a href="https://console.groq.com/keys" target="_blank" rel="noopener" class="text-fuchsia-400 underline hover:text-fuchsia-300">console.groq.com</a>.
+            </p>
+            <input id="api-key-input" type="password" autocomplete="off" spellcheck="false" placeholder="gsk_..."
+                class="w-full rounded-lg bg-[#12101f] border border-purple-800/70 focus:border-amber-500 outline-none p-3 text-sm font-mono placeholder-gray-600">
+            <div class="flex items-center gap-2 mt-2">
+                <input id="api-key-show" type="checkbox" class="accent-amber-500">
+                <label for="api-key-show" class="text-xs text-gray-400 select-none cursor-pointer">Afficher la clé</label>
+            </div>
+            <div class="flex justify-end gap-2 mt-5">
+                <button id="btn-remove-key" class="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-sm font-semibold transition">Supprimer</button>
+                <button id="btn-save-key" class="px-5 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-black text-sm font-bold transition">Enregistrer</button>
+            </div>
+        </div>
+    </div>
+    -->
+
+    <!-- Toast notifications -->
+    <div id="toast-container" class="fixed bottom-5 right-5 z-50 space-y-2"></div>
+
+    <footer class="text-center text-xs text-gray-600 py-6">
+        Music Hit Maker Studio — Propulsé par Groq · Optimisé pour Suno & Udio
+    </footer>
+
+    <script src="app.js"></script>
+</body>
+</html>
