@@ -1,7 +1,9 @@
 /**
  * Music Hit Maker Studio - Backend Server
- * Sert les fichiers statiques du dossier public/ et relaie les requêtes
- * de génération vers l'API Groq (https://api.groq.com/openai/v1/chat/completions).
+ * - Sert les fichiers statiques du dossier public/
+ * - POST /api/generate        : génération paroles/style via Groq (BDD artistes + mode Auto)
+ * - POST /api/suno/generate   : soumission musicale à Suno (+ statut)
+ * - POST /api/udio/generate   : fallback Udio via udioapi.pro (+ statut)
  */
 
 require("dotenv").config();
@@ -9,6 +11,8 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
+
+const { ARTISTS_DATABASE } = require("./public/artistes_presets.js");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -34,28 +38,76 @@ const UDIO_API_BASE = process.env.UDIO_API_BASE || "https://udioapi.pro/api";
 const UDIO_API_KEY = process.env.UDIO_API_KEY || "";
 const UDIO_MODEL = process.env.UDIO_MODEL || "chirp-v4-5";
 
-const SYSTEM_PROMPT = [
-    "Tu es un directeur artistique et auteur-compositeur à succès.",
-    "Génère une structure de paroles rythmée avec balises [Intro], [Couplet], [Refrain], [Pont], [Outro]",
-    "et propose un Style Prompt optimisé pour les générateurs audio IA (Suno/Udio).",
-    "Réponds STRICTEMENT sous la forme d'un objet JSON valide au format :",
-    "{",
-    '  "stylePrompt": "string",',
-    '  "blocks": [',
-    '    { "type": "Intro", "text": "string" },',
-    '    { "type": "Refrain", "text": "string" }',
-    "  ]",
-    "}"
-].join("\n");
+/**
+ * Construit le System Prompt du Directeur Artistique d'élite.
+ * Deux modes :
+ *  - Création Auto ou thème vide : Groq invente un thème philosophique,
+ *    introspectif ou sociétal fort.
+ *  - Classique : le thème imposé par l'utilisateur est respecté.
+ */
+function buildSystemPrompt({ theme, artist, isAutoMode }) {
+    const artistName = artist ? artist.name : "Artiste Polyvalent";
+
+    let themeBlock;
+    if (isAutoMode || !theme) {
+        themeBlock = [
+            "MODE CRÉATION AUTO & THÈMES PROFONDS :",
+            "- N'utilise PAS de thèmes génériques (fête, amour basique, argent).",
+            "- GÉNÈRE UN THÈME PROFOND, INTROSPECTIF ET MARQUANT. Exemples de directions :",
+            "  * L'aliénation numérique et la quête de réel dans un monde saturé d'écrans.",
+            "  * Le poids du succès, la solitude au sommet et la trahison des proches.",
+            "  * La nostalgie de l'enfance face à la violence du passage à l'âge adulte.",
+            "  * La dualité entre la lumière publique et l'obscurité intérieure.",
+            "  * L'héritage familial, les sacrifices invisibles des parents et la rédemption."
+        ].join("\n");
+    } else {
+        themeBlock = "- Thème imposé : " + theme;
+    }
+
+    return [
+        "Tu es un Directeur Artistique, Parolier et Producteur Audio d'élite.",
+        "Ton rôle est de générer la structure complète et les paroles d'une chanson à succès.",
+        "",
+        themeBlock,
+        "",
+        "DONNÉES STUDIO DE L'ARTISTE CIBLE :",
+        "- Nom : " + artistName,
+        "- Genre : " + (artist ? artist.genre : "Modern Rap / Trap"),
+        "- Plage BPM : " + (artist ? artist.bpm_range : "120-130"),
+        "- Instruments : " + (artist ? artist.instruments : "808, Piano, Synth"),
+        "- Diction & Flow : " + (artist ? artist.flow_signature : "Melodic, dynamic flow"),
+        "- Preset Audio : " + (artist ? artist.prompt_audio_preset : "Modern production, polished mix"),
+        "",
+        "INSTRUCTIONS STRICTES :",
+        "1. PAROLES & MÉTRIQUE : Écris des paroles profondes avec une vraie poésie moderne.",
+        "   Respecte la Flow Signature de " + artistName + ". Inclus des balises [Intro], [Couplet 1],",
+        "   [Pré-refrain], [Refrain], [Couplet 2], [Pont], [Outro] et des annotations (Ad-libs, chœurs).",
+        "2. STYLE PROMPT (SUNO/UDIO) : Génère un prompt audio en ANGLAIS précis incluant genre,",
+        "   BPM exact, instrumentation et texture vocale.",
+        "",
+        "Réponds STRICTEMENT sous forme d'objet JSON valide (sans texte hors du JSON) :",
+        "{",
+        '  "generatedTheme": "Titre/Résumé du thème profond généré",',
+        '  "artistUsed": "' + artistName + '",',
+        '  "stylePrompt": "Prompt audio en anglais pour Suno",',
+        '  "blocks": [',
+        '    { "type": "Intro", "text": "paroles..." },',
+        '    { "type": "Couplet 1", "text": "paroles..." },',
+        '    { "type": "Refrain", "text": "paroles..." },',
+        '    { "type": "Outro", "text": "paroles..." }',
+        "  ]",
+        "}"
+    ].join("\n");
+}
 
 /**
  * Route POST /api/generate
- * Body attendu : { apiKey: string, style: string, theme: string }
- * Relaye la requête vers Groq et renvoie le JSON parsé.
+ * Body attendu : { apiKey?, theme?, targetArtist?, isAutoMode? }
+ * Relaye la requête vers Groq et renvoie { generatedTheme, artistUsed, stylePrompt, blocks }.
  */
 app.post("/api/generate", async (req, res) => {
     try {
-        const { apiKey: clientKey, style, theme } = req.body || {};
+        const { apiKey: clientKey, theme, targetArtist, isAutoMode } = req.body || {};
 
         // Priorité à la clé du client (localStorage), sinon fallback sur le .env du serveur
         const apiKey = clientKey && typeof clientKey === "string" && clientKey.trim().length >= 10
@@ -68,15 +120,22 @@ app.post("/api/generate", async (req, res) => {
             });
         }
 
-        if (!theme || typeof theme !== "string" || !theme.trim()) {
-            return res.status(400).json({ error: "Le thème du morceau est requis." });
+        // Sélection de l'artiste dans la BDD studio, ou choix aléatoire en mode Auto
+        let artist = ARTISTS_DATABASE.find(
+            (a) => a.name.toLowerCase() === String(targetArtist || "").toLowerCase()
+        );
+        if ((isAutoMode || !targetArtist) && !artist) {
+            artist = ARTISTS_DATABASE[Math.floor(Math.random() * ARTISTS_DATABASE.length)];
         }
 
+        const systemPrompt = buildSystemPrompt({
+            theme: typeof theme === "string" ? theme.trim() : "",
+            artist,
+            isAutoMode: Boolean(isAutoMode)
+        });
+
         const userContent = [
-            `Style cible : ${style && style.trim() ? style.trim() : "au choix du directeur artistique"}`,
-            `Thème souhaité : ${theme.trim()}`,
-            "",
-            "Génère des paroles complètes et un Style Prompt optimisé Suno/Udio.",
+            "Génère la chanson complète conformément aux instructions du système.",
             "Réponds UNIQUEMENT avec l'objet JSON valide, sans texte autour, sans balises markdown."
         ].join("\n");
 
@@ -89,9 +148,9 @@ app.post("/api/generate", async (req, res) => {
             body: JSON.stringify({
                 model: GROQ_MODEL,
                 temperature: 0.9,
-                max_tokens: 2048,
+                max_tokens: 4096,
                 messages: [
-                    { role: "system", content: SYSTEM_PROMPT },
+                    { role: "system", content: systemPrompt },
                     { role: "user", content: userContent }
                 ]
             })
@@ -132,6 +191,10 @@ app.post("/api/generate", async (req, res) => {
 
         // Normalisation de la réponse
         const result = {
+            generatedTheme: typeof parsed.generatedTheme === "string" ? parsed.generatedTheme : "",
+            artistUsed: typeof parsed.artistUsed === "string" && parsed.artistUsed
+                ? parsed.artistUsed
+                : (artist ? artist.name : ""),
             stylePrompt: typeof parsed.stylePrompt === "string" ? parsed.stylePrompt : "",
             blocks: Array.isArray(parsed.blocks)
                 ? parsed.blocks
@@ -402,5 +465,6 @@ app.listen(PORT, () => {
     console.log("  Music Hit Maker Studio");
     console.log(`  Serveur démarré : http://localhost:${PORT}`);
     console.log(`  Modèle Groq     : ${GROQ_MODEL}`);
+    console.log(`  Artistes BDD    : ${ARTISTS_DATABASE.length}`);
     console.log("==============================================");
 });

@@ -1,0 +1,44 @@
+name: Daily Hit Generator
+
+on:
+  # Déclenchement automatique chaque jour à 09h00 UTC
+  schedule:
+    - cron: '0 9 * * *'
+  # Déclenchement manuel depuis l'onglet "Actions" de GitHub
+  workflow_dispatch:
+
+jobs:
+  generate-daily-hit:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Récupérer le dépôt
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Configurer Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 📦 Installer les dépendances (si package.json présent)
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci || npm install
+          elif [ -f package.json ]; then
+            npm install --omit=dev
+          fi
+
+      - name: 🚀 Générer le Hit du jour (thème profond via Groq)
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GROQ_MODEL: ${{ vars.GROQ_MODEL || 'openai/gpt-oss-120b' }}
+          BANANA_API_KEY: ${{ secrets.BANANA_API_KEY }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: node cron_daily.js
+
+      - name: 💾 Sauvegarder le hit comme artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: daily-hit-${{ github.run_id }}
+          path: hits/
+          retention-days: 90

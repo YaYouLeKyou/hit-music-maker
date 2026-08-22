@@ -89,18 +89,37 @@
                     <h2 class="text-lg font-bold mb-1"><i class="fa-solid fa-wand-magic-sparkles text-fuchsia-400 mr-2"></i>Génération IA (Groq)</h2>
                     <p class="text-xs text-gray-400 mb-4">Laissez l'IA composer la structure et le style pour vous.</p>
 
-                    <label class="block text-sm font-medium text-gray-300 mb-1">Thème du morceau *</label>
-                    <textarea id="gen-theme" rows="3" placeholder="Ex : un été à Paris, amour de vacances, ambiance nostalgique…"
+                    <!-- Artiste de référence (BDD Studio - 36 artistes) -->
+                    <label class="block text-sm font-medium text-gray-300 mb-1">Artiste de référence (BDD Studio)</label>
+                    <select id="artist-style"
+                        class="w-full rounded-lg bg-[#12101f] border border-purple-800/70 focus:border-fuchsia-500 outline-none p-3 text-sm">
+                        <option value="">— Choisissez un artiste (ou aléatoire) —</option>
+                    </select>
+
+                    <!-- Thème personnalisé (optionnel : vide = thème profond auto) -->
+                    <label class="block text-sm font-medium text-gray-300 mt-3 mb-1">Thème de la chanson (optionnel)</label>
+                    <textarea id="gen-theme" rows="2" placeholder="Laisse vide pour un thème profond automatique… Ex : un été à Paris"
                         class="w-full rounded-lg bg-[#12101f] border border-purple-800/70 focus:border-fuchsia-500 outline-none p-3 text-sm placeholder-gray-600"></textarea>
 
-                    <label class="block text-sm font-medium text-gray-300 mt-3 mb-1">Style cible (optionnel)</label>
-                    <input id="gen-style" type="text" placeholder="Ex : Afro-pop français, style Aya Nakamura"
+                    <!-- Style cible libre (optionnel) -->
+                    <label class="block text-sm font-medium text-gray-300 mt-3 mb-1">Style cible libre (optionnel)</label>
+                    <input id="gen-style" type="text" placeholder="Ex : Afro-pop français, ambiance nostalgique"
                         class="w-full rounded-lg bg-[#12101f] border border-purple-800/70 focus:border-fuchsia-500 outline-none p-3 text-sm placeholder-gray-600">
 
-                    <button id="btn-generate"
-                        class="mt-4 w-full py-3 rounded-xl font-bold text-white bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500 transition shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">
-                        <i class="fa-solid fa-bolt mr-2"></i>Générer avec l'IA
-                    </button>
+                    <!-- Boutons d'action -->
+                    <div class="flex gap-2 mt-4">
+                        <button id="btn-generate"
+                            class="flex-1 py-3 rounded-xl font-bold text-white bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500 transition shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">
+                            <i class="fa-solid fa-bolt mr-1"></i>Générer
+                        </button>
+                        <button id="btn-auto"
+                            class="flex-1 py-3 rounded-xl font-bold text-white bg-gradient-to-r from-purple-600 via-pink-600 to-rose-500 hover:from-purple-500 hover:via-pink-500 hover:to-rose-400 transition shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">
+                            <i class="fa-solid fa-wand-sparkles mr-1"></i>Création Auto
+                        </button>
+                    </div>
+
+                    <!-- Info thème/artiste générés -->
+                    <div id="gen-info" class="hidden mt-3 rounded-lg bg-purple-500/10 border border-purple-500/40 text-purple-200 text-xs p-3"></div>
 
                     <div id="gen-error" class="hidden mt-3 rounded-lg bg-red-500/15 border border-red-500/50 text-red-300 text-sm p-3"></div>
                 </div>
@@ -263,6 +282,7 @@
         Music Hit Maker Studio — Propulsé par Groq · Optimisé pour Suno & Udio
     </footer>
 
+    <script src="artistes_presets.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

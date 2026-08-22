@@ -336,30 +336,31 @@ function closeApiKeyModal() {
 // Génération IA via Groq (relai serveur local)
 // ============================================================
 
-async function generateWithGroq() {
+/**
+ * Génère la chanson via Groq.
+ * @param {boolean} isAutoMode - Mode Création Auto : thème profond inventé par l'IA
+ * et artiste choisi aléatoirement dans la BDD studio.
+ */
+async function generateWithGroq(isAutoMode = false) {
     // [FONCTIONNALITÉ COMMENTÉE] Saisie de clé côté client.
     // La clé est chargée automatiquement depuis .env par le serveur.
-    //
-    // const apiKey = getApiKey();
-    // if (!apiKey) {
-    //     toast("Configurez d'abord votre clé API Groq.", "warning");
-    //     openApiKeyModal();
-    //     return;
-    // }
 
-    const theme = $("gen-theme").value.trim();
-    if (!theme) {
-        showGenError("Veuillez saisir un thème pour votre morceau.");
-        return;
+    let theme = $("gen-theme").value.trim();
+    const targetArtist = $("artist-style") ? $("artist-style").value : "";
+    const styleLibre = $("gen-style").value.trim();
+
+    // Le style libre est fusionné dans le thème s'il est renseigné
+    if (!isAutoMode && styleLibre) {
+        theme = (theme ? theme + ". " : "") + "Style cible libre : " + styleLibre;
     }
 
-    const style = $("gen-style").value.trim();
-    const btn = $("btn-generate");
+    const btn = isAutoMode ? $("btn-auto") : $("btn-generate");
     const originalHtml = btn.innerHTML;
 
     hideGenError();
+    hideGenInfo();
     btn.disabled = true;
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>Composition en cours…';
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>Composition…';
     btn.classList.add("generating");
 
     try {
@@ -367,7 +368,11 @@ async function generateWithGroq() {
         const res = await fetch("/api/generate", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ style, theme })
+            body: JSON.stringify({
+                theme: isAutoMode ? "" : theme,
+                targetArtist: isAutoMode ? "" : targetArtist,
+                isAutoMode: Boolean(isAutoMode)
+            })
         });
 
         const data = await res.json();
@@ -388,6 +393,9 @@ async function generateWithGroq() {
         saveStudioState();
         renderBlocks();
         updatePreview();
+
+        // Affiche le thème généré et l'artiste utilisé
+        showGenInfo(data.generatedTheme, data.artistUsed, isAutoMode);
         toast("Composition générée avec succès ! 🎵");
     } catch (err) {
         showGenError(err.message || "Échec de la génération.");
@@ -397,6 +405,23 @@ async function generateWithGroq() {
         btn.innerHTML = originalHtml;
         btn.classList.remove("generating");
     }
+}
+
+function showGenInfo(generatedTheme, artistUsed, isAutoMode) {
+    const el = $("gen-info");
+    if (!generatedTheme && !artistUsed) {
+        el.classList.add("hidden");
+        return;
+    }
+    el.innerHTML =
+        '<i class="fa-solid fa-' + (isAutoMode ? "wand-sparkles" : "circle-info") + ' mr-1"></i>' +
+        "<strong>" + escapeHtml(artistUsed || "Artiste Polyvalent") + "</strong>" +
+        (generatedTheme ? " — Thème : " + escapeHtml(generatedTheme) : "");
+    el.classList.remove("hidden");
+}
+
+function hideGenInfo() {
+    $("gen-info").classList.add("hidden");
 }
 
 function showGenError(msg) {
@@ -833,6 +858,36 @@ function initPresets() {
     });
 }
 
+/** Remplit le select des artistes groupés par région/langue depuis la BDD studio */
+function populateArtistSelect() {
+    const select = $("artist-style");
+    if (!select || typeof ARTISTS_DATABASE === "undefined") return;
+
+    // Conserve l'option par défaut
+    select.innerHTML = '<option value="">— Choisissez un artiste (ou aléatoire) —</option>';
+
+    const groups = {
+        "Français / Francophonie": ARTISTS_DATABASE.filter(a => a.language === "Français"),
+        "US / UK": ARTISTS_DATABASE.filter(a => a.language === "Anglais"),
+        "Latino": ARTISTS_DATABASE.filter(a => a.language === "Espagnol")
+    };
+
+    for (const [groupLabel, artists] of Object.entries(groups)) {
+        if (artists.length === 0) continue;
+        const optgroup = document.createElement("optgroup");
+        optgroup.label = groupLabel;
+
+        artists.forEach(artist => {
+            const option = document.createElement("option");
+            option.value = artist.name;
+            option.textContent = artist.name + " (" + artist.genre + ")";
+            optgroup.appendChild(option);
+        });
+
+        select.appendChild(optgroup);
+    }
+}
+
 function init() {
     loadStudioState();
     loadHistory();
@@ -844,6 +899,7 @@ function init() {
     renderHistory();
     // refreshApiKeyUi(); // [COMMENTÉ] réactiver avec la fonctionnalité clé API client
     initPresets();
+    populateArtistSelect();
 
     // --- Onglets ---
     $("tab-studio").addEventListener("click", () => switchTab("studio"));
@@ -881,8 +937,9 @@ function init() {
     });
     */
 
-    // --- Génération IA ---
-    $("btn-generate").addEventListener("click", generateWithGroq);
+    // --- Génération IA (classique + Création Auto) ---
+    $("btn-generate").addEventListener("click", () => generateWithGroq(false));
+    $("btn-auto").addEventListener("click", () => generateWithGroq(true));
 
     // --- Style prompt ---
     $("style-prompt").addEventListener("input", (e) => {
