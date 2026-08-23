@@ -459,6 +459,78 @@ function extractJson(text) {
     return JSON.parse(cleaned.slice(start, end + 1));
 }
 
+// --- Multer configuration for file uploads ---
+const upload = require('multer')({
+    storage: require('multer').diskStorage({
+        destination: (req, file, cb) => cb(null, 'uploads/'),
+        filename: (req, file, cb) => cb(null, `upload-${Date.now()}${require('path').extname(file.originalname)}`)
+    }),
+    limits: { fileSize: 25 * 1024 * 1024 } // 25MB max (Instagram limit)
+});
+
+// --- PUBLISH ENDPOINT ---
+app.post("/api/publish", upload.single('file'), async (req, res) => {
+    console.log("[PUBLISH] Starting manual upload/publish process");
+    
+    try {
+        // Get audio source
+        let audioPath = req.file?.path || req.body?.audioUrl;
+        if (!audioPath) {
+            console.error("[PUBLISH] No audio source provided");
+            return res.status(400).json({ error: "Aucune source audio fournie" });
+        }
+        console.log(`[PUBLISH] Audio source: ${audioPath}`);
+
+        // Extract metadata
+        const { stylePrompt, theme, artistUsed = "Artiste" } = req.body;
+        console.log(`[PUBLISH] Metadata - Style: ${stylePrompt?.substring(0, 30)}..., Artist: ${artistUsed}`);
+
+        // Generate cover using Hugging Face
+        let coverPath = null;
+        try {
+            console.log("[PUBLISH] Generating cover with Stable Diffusion (HF API)");
+            const coverResult = await require('./social_publisher.js').generateHFArtwork(
+                stylePrompt || artistUsed,
+                process.env.HF_API_KEY
+            );
+            coverPath = coverResult?.path || coverResult?.url || 'public/default_cover.png';
+            console.log(`[PUBLISH] Cover generated: ${coverPath}`);
+        } catch (coverErr) {
+            console.warn("[PUBLISH] Cover generation failed, using fallback:", coverErr.message);
+            coverPath = 'public/covers/fallback.png';
+        }
+
+        // Build caption with hashtags
+        const caption = buildCaption({ stylePrompt, artistUsed, theme });
+        console.log(`[PUBLISH] Caption: ${caption.substring(0, 50)}...`);
+
+        // Publish to social platforms
+        const publishResult = await require('./social_publisher.js').publishToAllSocial({
+            audioUrl: audioPath,
+            coverPath,
+            caption
+        });
+
+        console.log("[PUBLISH] Publication completed");
+        res.json({
+            status: "SUCCESS",
+            facebook: publishResult.facebook ? {
+                id: publishResult.facebook.postId,
+                url: `https://facebook.com/${publishResult.facebook.postId}`
+            } : null,
+            instagram: publishResult.instagram ? {
+                id: publishResult.instagram.postId,
+                url: `https://instagram.com/p/${publishResult.instagram.postId}`
+            } : null,
+            coverGenerated: !!coverPath
+        });
+
+    } catch (err) {
+        console.error("[PUBLISH] Error:", err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // --- Démarrage ---
 app.listen(PORT, () => {
     console.log("==============================================");

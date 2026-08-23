@@ -202,19 +202,19 @@ function renderBlocks() {
                     </select>
                 </div>
                 <div class="flex items-center gap-1">
-                    <button data-action="up" title="Monter" class="w-8 h-8 rounded-md bg-purple-900/50 hover:bg-purple-700 text-sm transition" ${index === 0 ? "disabled" : ""}>
+                    <button data-action="up" title="Monter" class="w-8 h-8 rounded-md bg-purple-900/50 hover:bg-purple-700 transition-all duration-200 text-sm active:scale-90 disabled:opacity-40 disabled:cursor-not-allowed" ${index === 0 ? "disabled" : ""}>
                         <i class="fa-solid fa-arrow-up"></i>
                     </button>
-                    <button data-action="down" title="Descendre" class="w-8 h-8 rounded-md bg-purple-900/50 hover:bg-purple-700 text-sm transition" ${index === state.blocks.length - 1 ? "disabled" : ""}>
+                    <button data-action="down" title="Descendre" class="w-8 h-8 rounded-md bg-purple-900/50 hover:bg-purple-700 transition-all duration-200 text-sm active:scale-90 disabled:opacity-40 disabled:cursor-not-allowed" ${index === state.blocks.length - 1 ? "disabled" : ""}>
                         <i class="fa-solid fa-arrow-down"></i>
                     </button>
-                    <button data-action="delete" title="Supprimer" class="w-8 h-8 rounded-md bg-red-900/50 hover:bg-red-600 text-sm transition">
+                    <button data-action="delete" title="Supprimer" class="w-8 h-8 rounded-md bg-red-900/50 hover:bg-red-600 transition-all duration-200 text-sm active:scale-90">
                         <i class="fa-solid fa-trash-can"></i>
                     </button>
                 </div>
             </div>
             <textarea data-action="text" rows="4" placeholder="Paroles de cette section…"
-                class="w-full rounded-lg bg-[#12101f] border border-purple-900/60 focus:border-fuchsia-500 outline-none p-3 text-sm leading-relaxed placeholder-gray-600">${escapeHtml(block.text)}</textarea>
+                class="w-full rounded-lg bg-night border border-purple-900/60 p-3 text-sm leading-relaxed outline-none transition-colors duration-200 placeholder:text-slate-500 focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/30">${escapeHtml(block.text)}</textarea>
         `;
 
         // --- Événements du bloc ---
@@ -618,11 +618,134 @@ function finishSunoPolling(success, errorMsg, tracks, provider) {
     }
 
     renderSunoSteps(SUNO_STEPS.length);
-    setMusicStatus("Votre musique est prête ! 🎉", 100);
-    setTimeout(() => setMusicStatus(null), 1500);
+    setMusicStatus("Votre musique est prête ! Publication sur Facebook & Instagram…", 100);
+
+    // --- Publication automatique sur Facebook & Instagram ---
+    publishToSocialMedia(tracks[0].audioUrl);
+
     renderMusicTracks(tracks, provider);
     saveSongWithTracks(tracks, provider);
-    toast("Musique générée via " + (provider === "udio" ? "Udio" : "Suno") + " et sauvegardée ! 🎧");
+    toast("Musique générée et publiée ! 🎵");
+}
+
+/** Publie la musique sur Facebook et Instagram */
+async function publishToSocialMedia(audioUrl) {
+    try {
+        const payload = {
+            stylePrompt: state.stylePrompt.trim(),
+            blocks: state.blocks,
+            generatedTheme: $("gen-theme").value.trim(),
+            artistUsed: extractArtistFromStyle(state.stylePrompt),
+            audioUrl: audioUrl
+        };
+
+        const res = await fetch("/api/publish", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Échec de la publication");
+
+        const results = data.results || {};
+        const facebook = results.facebook ? "✅ Facebook" : "⚠️ Facebook";
+        const instagram = results.instagram ? "✅ Instagram" : "⚠️ Instagram";
+        toast(`Publication : ${facebook} | ${instagram}`, "success");
+
+        // Sauvegarder le track publié dans localStorage pour la page "Tracks Publiés"
+        savePublishedTrack({
+            title: payload.generatedTheme || "Track publié",
+            audioUrl: audioUrl,
+            coverUrl: data.coverGenerated ? "/covers/fallback.png" : "/public/default_cover.png",
+            stylePrompt: payload.stylePrompt,
+            artistUsed: payload.artistUsed,
+            blocks: payload.blocks
+        });
+    } catch (err) {
+        console.error("Publication échouée :", err);
+        toast("⚠️ Publication partielle : " + err.message, "warning");
+    }
+}
+
+/** Sauvegarde un track publié dans localStorage */
+function savePublishedTrack(trackData) {
+    try {
+        const existing = JSON.parse(localStorage.getItem("publishedTracks") || "[]");
+        const newTrack = {
+            id: Date.now() + "-" + Math.random().toString(36).slice(2, 9),
+            ...trackData,
+            createdAt: new Date().toISOString()
+        };
+        existing.unshift(newTrack);
+        localStorage.setItem("publishedTracks", JSON.stringify(existing));
+        console.log("Track publié sauvegardé :", newTrack.id);
+    } catch (e) {
+        console.error("Erreur sauvegarde track publié :", e);
+    }
+}
+
+function extractArtistFromStyle(style) {
+    if (!style) return "Artiste Polyvalent";
+    const match = style.match(/^([^,]+)/);
+    return match ? match[1].trim() : "Artiste Polyvalent";
+}
+
+/**
+ * Gère le téléchargement manuel d'un fichier audio et sa publication
+ * automatique sur Facebook & Instagram via l'API serveur.
+ */
+async function uploadAndPublish() {
+    const fileInput = document.createElement("input");
+    fileInput.type = "file";
+    fileInput.accept = "audio/*";
+    fileInput.style.display = "none";
+
+    fileInput.addEventListener("change", async (e) => {
+        const file = e.target.files[0];
+        if (!file) {
+            document.body.removeChild(fileInput);
+            return;
+        }
+
+        const btn = $("btn-upload-publish");
+        const originalHtml = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i>Téléchargement…';
+
+        try {
+            const formData = new FormData();
+            formData.append("file", file);
+            formData.append("stylePrompt", state.stylePrompt.trim());
+            formData.append("theme", $("gen-theme") ? $("gen-theme").value.trim() : "");
+            formData.append("artistUsed", extractArtistFromStyle(state.stylePrompt) || "Artiste Polyvalent");
+
+            const res = await fetch("/api/publish", {
+                method: "POST",
+                body: formData
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                throw new Error(data.error || `Erreur serveur (${res.status})`);
+            }
+
+            const facebook = data.facebook ? "✅ Facebook" : "⚠️ Facebook";
+            const instagram = data.instagram ? "✅ Instagram" : "⚠️ Instagram";
+            toast(`Publication : ${facebook} | ${instagram}`, "success");
+        } catch (err) {
+            console.error("[uploadAndPublish] Échec :", err);
+            toast("Échec de la publication : " + (err.message || "erreur inconnue"), "error");
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+            document.body.removeChild(fileInput);
+        }
+    });
+
+    document.body.appendChild(fileInput);
+    fileInput.click();
 }
 
 /** Affiche les pistes générées avec bouton play / pause */
@@ -639,7 +762,7 @@ function renderMusicTracks(tracks, provider) {
 
         card.innerHTML = `
             <button data-action="play" title="Écouter"
-                class="w-12 h-12 shrink-0 rounded-full bg-gradient-to-br from-fuchsia-500 to-purple-600 hover:from-fuchsia-400 hover:to-purple-500 text-white text-lg transition shadow-lg">
+                class="w-12 h-12 shrink-0 rounded-full bg-gradient-to-br from-fuchsia-500 to-purple-600 hover:from-fuchsia-400 hover:to-purple-500 transition-all duration-200 text-white text-lg shadow-lg shadow-fuchsia-600/30 active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-400">
                 <i class="fa-solid fa-play"></i>
             </button>
             <div class="flex-1 min-w-0">
@@ -753,7 +876,7 @@ function renderHistory() {
         const refArtist = extractRefArtist(song.stylePrompt);
 
         const card = document.createElement("div");
-        card.className = "rounded-2xl bg-[#1c1836] border border-purple-800/60 p-5 shadow-lg flex flex-col gap-3";
+        card.className = "rounded-2xl bg-panel border border-purple-800/50 p-6 shadow-lg shadow-black/20 flex flex-col gap-4 transition-all duration-200 hover:shadow-xl hover:border-fuchsia-500/40";
 
         card.innerHTML = `
             <div class="flex items-start justify-between gap-2">
@@ -829,8 +952,8 @@ function switchTab(tab) {
     $("view-studio").classList.toggle("hidden", !isStudio);
     $("view-history").classList.toggle("hidden", isStudio);
 
-    const activeCls = "tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition bg-purple-600 text-white shadow";
-    const idleCls = "tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition bg-transparent text-gray-300 hover:bg-purple-900/40";
+    const activeCls = "tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 bg-gradient-to-r from-fuchsia-600 to-purple-600 text-white shadow-md shadow-fuchsia-600/25 hover:from-fuchsia-500 hover:to-purple-500 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-400 focus-visible:ring-offset-2 focus-visible:ring-offset-night";
+    const idleCls = "tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-400/70";
 
     $("tab-studio").className = isStudio ? activeCls : idleCls;
     $("tab-history").className = isStudio ? idleCls : activeCls;
@@ -846,7 +969,7 @@ function initPresets() {
     const container = $("preset-buttons");
     STYLE_PRESETS.forEach(preset => {
         const btn = document.createElement("button");
-        btn.className = "px-3 py-1.5 rounded-full text-xs font-semibold bg-purple-900/60 hover:bg-fuchsia-600 border border-purple-700/60 transition";
+        btn.className = "px-3 py-1.5 rounded-full text-xs font-semibold bg-purple-900/60 hover:bg-fuchsia-600 border border-purple-700/60 transition-all duration-200 cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-400";
         btn.textContent = preset.label;
         btn.addEventListener("click", () => {
             $("style-prompt").value = preset.value;
@@ -966,8 +1089,22 @@ function init() {
         copyToClipboard(lyrics, "Lyrics Prompt copié !");
     });
 
+    $("btn-copy-style").addEventListener("click", () => {
+        const style = $("style-prompt").value.trim();
+        if (!style) {
+            toast("Aucun style prompt à copier.", "warning");
+            return;
+        }
+        copyToClipboard(style, "Style Prompt copié !");
+    });
+
     // --- CTA final : Générer ma musique (injection automatique dans Suno) ---
     $("btn-generate-music").addEventListener("click", generateMusicOnSuno);
+
+    // --- Bouton Upload & Publier ---
+    if ($("btn-upload-publish")) {
+        $("btn-upload-publish").addEventListener("click", uploadAndPublish);
+    }
 
     // --- Sauvegarde / nettoyage ---
     $("btn-save-song").addEventListener("click", saveCurrentSong);
