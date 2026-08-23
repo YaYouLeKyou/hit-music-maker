@@ -28,6 +28,8 @@ const fs = require("fs");
 const path = require("path");
 
 const { ARTISTS_DATABASE } = require("./public/artistes_presets.js");
+const { publishToAllSocial } = require("./social_publisher.js");
+const { generateFallbackCover } = require("./cover_fallback.js");
 
 // ============================================================
 // Configuration
@@ -46,6 +48,7 @@ const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models
 
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL || "";
 const DRY_RUN = process.argv.includes("--dry-run");
+const NO_SOCIAL = process.argv.includes("--no-social");
 
 const NL = String.fromCharCode(10); // saut de ligne fiable
 
@@ -61,6 +64,8 @@ function printSecretsReminder() {
     console.log("   • GROQ_API_KEY     : votre clé gsk_... (obligatoire)");
     console.log("   • BANANA_API_KEY   : votre clé Gemini/Nano Banana (pochette + fallback)");
     console.log("   • DISCORD_WEBHOOK_URL : optionnel (notification du hit du jour)");
+    console.log("   • FB_PAGE_ACCESS_TOKEN / FACEBOOK_PAGE_ID : publication Facebook");
+    console.log("   • INSTAGRAM_ACCOUNT_ID / INSTAGRAM_ACCESS_TOKEN : publication Instagram");
     console.log("");
 }
 
@@ -343,6 +348,16 @@ async function generateCoverArt(hit) {
     } else {
         console.warn("⚠️ [CRON] Aucune image retournée par Nano Banana (réponse texte uniquement).");
     }
+
+    // Fallback local : pochette PNG générée sans dépendance (utile pour Instagram)
+    if (!hit.coverPath) {
+        try {
+            hit.coverPath = generateFallbackCover(path.join(__dirname, "hits"));
+            console.log("🖼️ [CRON] Pochette de secours générée localement : " + hit.coverPath);
+        } catch (fbErr) {
+            console.warn("⚠️ [CRON] Génération de la pochette de secours échouée : " + fbErr.message);
+        }
+    }
 }
 
 // ============================================================
@@ -371,6 +386,18 @@ function saveHitToFile(hit) {
     const filePath = path.join(dir, `hit-${dateStr}.json`);
     fs.writeFileSync(filePath, JSON.stringify(hit, null, 2), "utf8");
     console.log("💾 [CRON] Hit sauvegardé : " + filePath);
+}
+
+async function publishSocial(hit) {
+    if (NO_SOCIAL) {
+        console.log("ℹ️ [CRON] Publication sociale désactivée (--no-social).");
+        return null;
+    }
+    console.log("");
+    console.log("📣 [CRON] Publication de la Chanson du Jour sur Facebook & Instagram…");
+    const results = await publishToAllSocial(hit);
+    hit.social = results;
+    return results;
 }
 
 async function notifyDiscord(hit) {
@@ -418,9 +445,15 @@ async function notifyDiscord(hit) {
 
         if (!DRY_RUN) {
             saveHitToFile(hit);
+
+            // Publication Facebook + Instagram (échecs non bloquants)
+            await publishSocial(hit);
+            // Re-sauvegarde avec les résultats sociaux (IDs des posts)
+            saveHitToFile(hit);
+
             await notifyDiscord(hit);
         } else {
-            console.log("ℹ️ [CRON] Mode --dry-run : aucune sauvegarde ni notification.");
+            console.log("ℹ️ [CRON] Mode --dry-run : aucune sauvegarde, notification ni publication sociale.");
         }
 
         console.log("🏁 [CRON] Job quotidien terminé avec succès.");
