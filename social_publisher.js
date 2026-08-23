@@ -52,6 +52,11 @@ function buildCaption(hit) {
         lines.push("🎛️ Style : " + hit.stylePrompt.slice(0, 180));
     }
 
+    // Lien d'écoute si la musique a été générée (Suno/Udio)
+    if (hit.music && hit.music.audioUrl) {
+        lines.push("🎧 Écoutez la chanson complète : " + hit.music.audioUrl);
+    }
+
     // Extrait des paroles : privilégie le refrain, sinon début des paroles
     let excerpt = "";
     if (Array.isArray(hit.blocks) && hit.blocks.length) {

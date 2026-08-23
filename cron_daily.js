@@ -24,12 +24,22 @@
 
 "use strict";
 
+require("dotenv").config();
+
 const fs = require("fs");
 const path = require("path");
 
 const { ARTISTS_DATABASE } = require("./public/artistes_presets.js");
 const { publishToAllSocial } = require("./social_publisher.js");
 const { generateFallbackCover } = require("./cover_fallback.js");
+
+// --- Configuration Suno / Udio (génération musicale) ---
+const SUNO_API_KEY = process.env.SUNO_API_KEY || "";
+const SUNO_API_BASE = process.env.SUNO_API_BASE || "https://api.sunoapi.org/api/v1";
+const SUNO_MODEL = process.env.SUNO_MODEL || "V4";
+const UDIO_API_KEY = process.env.UDIO_API_KEY || "";
+const UDIO_API_BASE = process.env.UDIO_API_BASE || "https://udioapi.pro/api";
+const UDIO_MODEL = process.env.UDIO_MODEL || "chirp-v4-5";
 
 // ============================================================
 // Configuration
@@ -41,9 +51,9 @@ const GROQ_MODEL = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
 
 // Clé Gemini (utilisée pour le fallback LLM ET pour l'image Nano Banana)
 const GEMINI_API_KEY = process.env.BANANA_API_KEY || process.env.GEMINI_API_KEY || "";
-const GEMINI_TEXT_MODEL = process.env.GEMINI_TEXT_MODEL || "gemini-2.5-flash";
+const GEMINI_TEXT_MODEL = process.env.GEMINI_TEXT_MODEL || "gemini-3.6-flash";
 const GEMINI_IMAGE_MODEL = process.env.GEMINI_IMAGE_MODEL || "nano-banana-pro-preview";
-const GEMINI_IMAGE_FALLBACK_MODEL = process.env.GEMINI_IMAGE_FALLBACK_MODEL || "gemini-2.5-flash-image";
+const GEMINI_IMAGE_FALLBACK_MODEL = process.env.GEMINI_IMAGE_FALLBACK_MODEL || "gemini-3.1-flash-image";
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL || "";
@@ -361,6 +371,169 @@ async function generateCoverArt(hit) {
 }
 
 // ============================================================
+// Génération musicale : Suno (principal) -> Udio (fallback)
+// ============================================================
+
+function sleepMs(ms) {
+    return new Promise((r) => setTimeout(r, ms));
+}
+
+/** Soumet la chanson à Suno puis attend la fin de la génération */
+async function generateMusicWithSuno(hit) {
+    const response = await fetch(`${SUNO_API_BASE}/generate`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${SUNO_API_KEY}`
+        },
+        body: JSON.stringify({
+            customMode: true,
+            instrumental: false,
+            model: SUNO_MODEL,
+            title: String(hit.generatedTheme || "Chanson du Jour").slice(0, 80),
+            style: String(hit.stylePrompt || "").slice(0, 1000),
+            prompt: String(hit.lyrics || "").slice(0, 5000),
+            callBackUrl: process.env.SUNO_CALLBACK_URL || "https://example.com/music-hit-maker-callback"
+        })
+    });
+
+    const data = await response.json().catch(() => null);
+
+    if (!response.ok || !data || data.code !== 200) {
+        if (data && data.code === 429) {
+            throw new Error("Crédits Suno insuffisants — rechargez votre compte sunoapi.org.");
+        }
+        throw new Error(`Erreur API Suno : ${(data && data.msg) || `HTTP ${response.status}`}`);
+    }
+
+    const taskId = data?.data?.taskId;
+    if (!taskId) throw new Error("Suno n'a pas renvoyé de taskId.");
+    console.log("🎵 [CRON] Tâche Suno soumise : " + taskId);
+
+    // Polling du statut (max ~8 minutes)
+    for (let i = 0; i < 48; i++) {
+        await sleepMs(10000);
+        const st = await fetch(
+            `${SUNO_API_BASE}/generate/record-info?taskId=${encodeURIComponent(taskId)}`,
+            { headers: { Authorization: `Bearer ${SUNO_API_KEY}` } }
+        );
+        const sd = await st.json().catch(() => null);
+        const d = sd?.data || {};
+        const tracks = (d.response && Array.isArray(d.response.sunoData)) ? d.response.sunoData : [];
+        const ready = tracks.find((t) => t.audioUrl || t.streamAudioUrl);
+        if (ready) {
+            return {
+                provider: "suno",
+                taskId,
+                title: ready.title || hit.generatedTheme,
+                audioUrl: ready.audioUrl || ready.streamAudioUrl,
+                duration: typeof ready.duration === "number" ? ready.duration : null
+            };
+        }
+        if (d.status === "FAILED" || tracks.some((t) => t.failMessage)) {
+            throw new Error("Génération Suno échouée (modération ou erreur).");
+        }
+        console.log("⏳ [CRON] Suno en cours de génération… (" + ((i + 1) * 10) + "s)");
+    }
+    throw new Error("Timeout : Suno n'a pas terminé la génération en 8 minutes.");
+}
+
+/** Soumet la chanson à Udio (fallback) puis attend la fin */
+async function generateMusicWithUdio(hit) {
+    const response = await fetch(`${UDIO_API_BASE}/v2/generate`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${UDIO_API_KEY}`
+        },
+        body: JSON.stringify({
+            model: UDIO_MODEL,
+            prompt: String(hit.lyrics || "").slice(0, 5000),
+            style: String(hit.stylePrompt || "").slice(0, 1000),
+            title: String(hit.generatedTheme || "Chanson du Jour").slice(0, 80),
+            make_instrumental: false
+        })
+    });
+
+    const data = await response.json().catch(() => null);
+
+    if (!response.ok || !data || data.code !== 200) {
+        if (data && data.code === 402) {
+            throw new Error("Crédits Udio épuisés — rechargez votre compte udioapi.pro.");
+        }
+        throw new Error(`Erreur API Udio : ${(data && data.message) || `HTTP ${response.status}`}`);
+    }
+
+    const taskId = data?.data?.task_id || data?.workId;
+    if (!taskId) throw new Error("Udio n'a pas renvoyé de taskId.");
+    console.log("🎵 [CRON] Tâche Udio soumise : " + taskId);
+
+    // Polling du statut (max ~8 minutes)
+    for (let i = 0; i < 48; i++) {
+        await sleepMs(10000);
+        const st = await fetch(
+            `${UDIO_API_BASE}/v2/feed?workId=${encodeURIComponent(taskId)}`,
+            { headers: { Authorization: `Bearer ${UDIO_API_KEY}` } }
+        );
+        const sd = await st.json().catch(() => null);
+        const items = Array.isArray(sd?.data?.response_data) ? sd.data.response_data : [];
+        const failed = items.find((t) => t.fail_message || t.error_message);
+        if (failed) throw new Error("Génération Udio échouée : " + (failed.fail_message || failed.error_message));
+        const ready = items.find((t) => t.audio_url);
+        if (ready) {
+            return {
+                provider: "udio",
+                taskId,
+                title: ready.title || hit.generatedTheme,
+                audioUrl: ready.audio_url,
+                duration: typeof ready.duration === "number" ? ready.duration : null
+            };
+        }
+        console.log("⏳ [CRON] Udio en cours de génération… (" + ((i + 1) * 10) + "s)");
+    }
+    throw new Error("Timeout : Udio n'a pas terminé la génération en 8 minutes.");
+}
+
+/**
+ * Génère la musique du hit via Suno puis Udio (fallback).
+ * Échec non bloquant : le message est enregistré dans hit.musicError.
+ */
+async function generateMusic(hit) {
+    if (!hit.lyrics) {
+        console.warn("⚠️ [CRON] Pas de paroles — génération musicale ignorée.");
+        return;
+    }
+
+    if (SUNO_API_KEY) {
+        try {
+            console.log("🎼 [CRON] Génération musicale via Suno…");
+            hit.music = await generateMusicWithSuno(hit);
+            console.log("🎧 [CRON] Musique prête : " + hit.music.audioUrl);
+            return;
+        } catch (err) {
+            console.warn("⚠️ [CRON] Suno indisponible : " + err.message);
+            if (!UDIO_API_KEY) {
+                hit.musicError = err.message;
+                return;
+            }
+        }
+    }
+
+    if (UDIO_API_KEY) {
+        try {
+            console.log("🎼 [CRON] Génération musicale via Udio (fallback)…");
+            hit.music = await generateMusicWithUdio(hit);
+            console.log("🎧 [CRON] Musique prête : " + hit.music.audioUrl);
+        } catch (err) {
+            console.warn("⚠️ [CRON] Udio indisponible : " + err.message);
+            hit.musicError = err.message;
+        }
+    } else if (!SUNO_API_KEY) {
+        console.warn("⚠️ [CRON] Ni SUNO_API_KEY ni UDIO_API_KEY — génération musicale ignorée.");
+    }
+}
+
+// ============================================================
 // Sorties : console, fichier JSON, notification Discord
 // ============================================================
 
@@ -403,11 +576,15 @@ async function publishSocial(hit) {
 async function notifyDiscord(hit) {
     if (!DISCORD_WEBHOOK_URL) return;
 
-    const content =
+    let content =
         "🎵 **Hit du jour — Music Hit Maker Studio**" + NL +
         "🎤 Artiste : **" + hit.artistUsed + "**" + NL +
         "💭 Thème : " + (hit.generatedTheme || "?").slice(0, 300) + NL +
         "🎛️ Style : `" + hit.stylePrompt.slice(0, 400) + "`";
+
+    if (hit.music && hit.music.audioUrl) {
+        content += NL + "🎧 Écoute : " + hit.music.audioUrl;
+    }
 
     try {
         const res = await fetch(DISCORD_WEBHOOK_URL, {
@@ -442,6 +619,9 @@ async function notifyDiscord(hit) {
         await generateCoverArt(hit);
 
         displayHit(hit);
+
+        // Génération musicale Suno -> Udio (échec non bloquant)
+        await generateMusic(hit);
 
         if (!DRY_RUN) {
             saveHitToFile(hit);
