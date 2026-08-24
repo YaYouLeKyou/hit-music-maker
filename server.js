@@ -321,6 +321,21 @@ app.post("/api/generate", async (req, res) => {
     }
 });
 
+/** POST /api/instagram/finalize — body: { creationId } */
+app.post("/api/instagram/finalize", express.json(), async (req, res) => {
+    try {
+        const { creationId } = req.body || {};
+        if (!creationId || !/^\d+$/.test(String(creationId))) {
+            return res.status(400).json({ error: "creationId requis." });
+        }
+        const result = await require("./social_publisher.js").finalizeInstagramReel(creationId);
+        res.json(result);
+    } catch (err) {
+        console.error("[IG-FINALIZE] Erreur :", err.message);
+        res.status(500).json({ status: "error", error: err.message });
+    }
+});
+
 /**
  * Route POST /api/suno/generate
  * Body attendu : { title: string, stylePrompt: string, lyrics: string }
@@ -1102,7 +1117,8 @@ app.post("/api/publish", upload.single('file'), async (req, res) => {
             coverGenerated,
             coverUrl: publicCoverUrl,
             audioUrl: persistedAudioUrl || localAudioUrl,
-            videoGenerated: !!videoPath
+            videoGenerated: !!videoPath,
+            instagramPendingCreationId: publishResult.instagramPendingCreationId || null
         });
 
     } catch (err) {

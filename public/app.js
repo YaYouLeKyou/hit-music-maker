@@ -598,6 +598,54 @@ async function pollPaidOrder(orderId) {
     tick();
 }
 
+/**
+ * Suit le traitement du Reel par Meta puis déclenche sa publication
+ * dès que le conteneur est prêt (FINISHED). Chaque appel serveur est
+ * court : aucun risque de timeout serverless.
+ */
+async function finalizeInstagramReelPoll(creationId) {
+    let attempts = 0;
+    const MAX = 40; // ~5 min à 8 s
+
+    async function tick() {
+        attempts++;
+        try {
+            const res = await fetch("/api/instagram/finalize", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ creationId })
+            });
+            const o = await res.json().catch(() => null);
+            if (!res.ok || !o) throw new Error(`HTTP ${res.status}`);
+
+            if (o.status === "published") {
+                const el = document.getElementById("ig-reel-status");
+                if (el) {
+                    el.innerHTML = `<a href="https://instagram.com/p/${escapeHtml(o.postId)}" target="_blank" rel="noopener" class="underline">Reel publié ✅ — voir sur Instagram</a>`;
+                    el.classList.remove("opacity-90");
+                }
+                toast("📸 Reel Instagram publié avec succès !", "success");
+                return;
+            }
+            if (o.status === "error") {
+                const el = document.getElementById("ig-reel-status");
+                if (el) el.textContent = "❌ Reel en échec : " + (o.error || "raison inconnue");
+                toast("Publication Instagram échouée : " + (o.error || "erreur"), "error");
+                return;
+            }
+            // processing -> on continue
+            const el = document.getElementById("ig-reel-status");
+            if (el) el.textContent = `Reel en traitement sur Instagram… (${attempts * 8}s)`;
+            if (attempts < MAX) setTimeout(tick, 8000);
+            else if (el) el.textContent = "⏳ Toujours en traitement — le Reel apparaîtra bientôt sur votre profil.";
+        } catch (err) {
+            console.warn("[IG-FINALIZE] Erreur polling :", err.message);
+            if (attempts < MAX) setTimeout(tick, 10000);
+        }
+    }
+    tick();
+}
+
 /** Soumet le morceau à Suno puis, en cas d'échec, bascule automatiquement sur Udio */
 async function generateMusicOnSuno() {
     const lyrics = buildLyricsPrompt();
@@ -1219,9 +1267,17 @@ async function performPublish() {
         const fbLine = data.facebook
             ? `✅ <a href="${escapeHtml(data.facebook.url)}" target="_blank" rel="noopener" class="underline hover:text-emerald-100">Voir sur Facebook</a>`
             : `⚠️ <span class="opacity-80">Facebook non publié${data.details?.facebook ? " — " + escapeHtml(data.details.facebook) : ""}</span>`;
-        const igLine = data.instagram
-            ? `✅ <a href="${escapeHtml(data.instagram.url)}" target="_blank" rel="noopener" class="underline hover:text-emerald-100">Voir sur Instagram</a>`
-            : `⚠️ <span class="opacity-80">Instagram non publié${data.details?.instagram ? " — " + escapeHtml(data.details.instagram) : ""}</span>`;
+        let igLine;
+        if (data.instagram) {
+            igLine = `✅ <a href="${escapeHtml(data.instagram.url)}" target="_blank" rel="noopener" class="underline hover:text-emerald-100">Voir sur Instagram</a>`;
+        } else if (data.instagramPendingCreationId) {
+            // Le conteneur Reel est créé : Meta le traite encore (jusqu'à ~2 min)
+            const creationId = data.instagramPendingCreationId;
+            igLine = `⏳ <span id="ig-reel-status" class="opacity-90">Reel en traitement sur Instagram…</span>`;
+            finalizeInstagramReelPoll(creationId);
+        } else {
+            igLine = `⚠️ <span class="opacity-80">Instagram non publié${data.details?.instagram ? " — " + escapeHtml(data.details.instagram) : ""}</span>`;
+        }
 
         const allOk = !!(data.facebook && data.instagram);
         console.log(`[Upload & Publier] Publication terminée — Facebook: ${data.facebook ? "OK" : "KO"}, Instagram: ${data.instagram ? "OK" : "KO"}`);

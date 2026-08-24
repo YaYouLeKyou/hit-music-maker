@@ -323,69 +323,110 @@ async function publishFacebookVideo(hit, videoSource, caption) {
     const postId = data.post_id || videoId;
     console.log(`✅ [SOCIAL] Vidéo Facebook publiée : https://facebook.com/${postId}`);
 
-    // Récupère l'URL publique du MP4 (CDN Meta) pour le Reel Instagram
+    // Récupère l'URL publique du MP4 (CDN Meta) — secours uniquement :
+    // la voie privilégiée pour le Reel est l'upload binaire direct
+    // (rupload) qui n'a pas besoin de cette URL.
     let sourceUrl = null;
-    try {
-        const info = await graphGet(videoId, { fields: "source", access_token: FB_PAGE_ACCESS_TOKEN });
-        if (info.source) sourceUrl = info.source;
-    } catch (e) {
-        console.warn("⚠️ [SOCIAL] URL source vidéo FB non récupérée : " + e.message);
+    const maxTries = 3;
+    for (let attempt = 1; attempt <= maxTries; attempt++) {
+        try {
+            const info = await graphGet(videoId, { fields: "source", access_token: FB_PAGE_ACCESS_TOKEN });
+            if (info.source) {
+                sourceUrl = info.source;
+                console.log(`✅ [SOCIAL] URL source vidéo FB obtenue (essai ${attempt}/${maxTries})`);
+                break;
+            }
+        } catch (e) {
+            console.warn(`⚠️ [SOCIAL] source vidéo FB non dispo (${attempt}/${maxTries}) : ${e.message}`);
+        }
+        if (attempt < maxTries) await sleep(4000);
+    }
+    if (!sourceUrl) {
+        console.warn("⚠️ [SOCIAL] URL source vidéo FB toujours indisponible après 45 s — Reel Instagram compromis.");
     }
 
     return { postId, videoId, sourceUrl };
 }
 
 /**
- * Publie un Reel Instagram à partir d'une URL de vidéo publique (MP4).
- * Container media_type=REELS puis publication après traitement.
+ * Étape 1 — Crée le conteneur Reel Instagram et y téléverse la vidéo.
+ * Priorité : fichier local via l'API Resumable Upload (rupload, aucun URL
+ * publique requise) ; sinon video_url publique.
+ * Retourne { creationId } — la publication se fait via finalizeInstagramReel().
  */
-async function publishInstagramReel(hit, videoUrl, caption) {
+async function createInstagramReelContainer(hit, videoUrl, localVideoPath, caption) {
     if (!IG_USER_ID || !IG_ACCESS_TOKEN) {
-        console.warn("⚠️ [SOCIAL] Instagram non configuré — Reel ignoré.");
-        return null;
-    }
-    if (!videoUrl) {
-        console.warn("⚠️ [SOCIAL] Pas d'URL vidéo publique — Reel impossible.");
-        return null;
+        throw new Error("Instagram non configuré (INSTAGRAM_ACCOUNT_ID / INSTAGRAM_ACCESS_TOKEN).");
     }
 
-    console.log("📸 [SOCIAL] Publication Reel Instagram en cours…");
-
-    const container = await graphPostForm(`${IG_USER_ID}/media`, {
+    const containerParams = {
         media_type: "REELS",
-        video_url: videoUrl,
         caption,
         share_to_feed: "true",
         access_token: IG_ACCESS_TOKEN
-    });
+    };
+
+    let videoBytes = null;
+    if (localVideoPath && fs.existsSync(localVideoPath)) {
+        // Voie privilégiée : upload binaire direct (pas besoin d'URL publique)
+        videoBytes = fs.readFileSync(localVideoPath);
+    } else if (videoUrl && /^https?:\/\//i.test(videoUrl)) {
+        containerParams.video_url = videoUrl;
+    } else {
+        throw new Error("aucune source vidéo disponible pour le Reel");
+    }
+
+    console.log("📦 [SOCIAL] Création du conteneur Reel Instagram…");
+    const container = await graphPostForm(`${IG_USER_ID}/media`, containerParams);
     const creationId = container.id;
-    console.log(`📦 [SOCIAL] Container Reel créé : ${creationId}`);
 
-    // Le traitement des vidéos est plus long que les images : jusqu'à ~5 min
-    let statusCode = "IN_PROGRESS";
-    for (let i = 0; i < 60; i++) {
-        await sleep(5000);
-        const status = await graphGet(creationId, {
-            fields: "status_code,status",
-            access_token: IG_ACCESS_TOKEN
-        });
-        statusCode = status.status_code || "IN_PROGRESS";
-        if (statusCode === "FINISHED") break;
-        if (statusCode === "ERROR" || statusCode === "EXPIRED") {
-            throw new Error(`Container Reel en échec (${statusCode}) : ${status.status || "?"}`);
+    if (videoBytes) {
+        console.log(`📤 [SOCIAL] Envoi de la vidéo vers Instagram (${(videoBytes.length / 1048576).toFixed(1)} Mo)…`);
+        const up = await fetch(
+            `https://rupload.facebook.com/ig-graph-upload/${GRAPH_VERSION}/${creationId}`,
+            {
+                method: "POST",
+                headers: {
+                    "Authorization": `OAuth ${IG_ACCESS_TOKEN}`,
+                    "offset": "0",
+                    "file_type": "video/mp4"
+                },
+                body: videoBytes
+            }
+        );
+        const ud = await up.json().catch(() => null);
+        if (!up.ok || !ud || ud.success !== true) {
+            throw new Error(`envoi vidéo Instagram : ${ud?.message || "HTTP " + up.status}`);
         }
-    }
-    if (statusCode !== "FINISHED") {
-        throw new Error("Timeout : le container Reel n'a pas fini d'être traité.");
+        console.log("✅ [SOCIAL] Vidéo envoyée à Instagram.");
     }
 
-    const published = await graphPostForm(`${IG_USER_ID}/media_publish`, {
-        creation_id: creationId,
+    return { creationId };
+}
+
+/**
+ * Étape 2 — Vérifie le traitement du conteneur et publie si prêt.
+ * Retourne { status: "published"|"processing"|"error", postId?, error? }.
+ */
+async function finalizeInstagramReel(creationId) {
+    const status = await graphGet(creationId, {
+        fields: "status_code,status",
         access_token: IG_ACCESS_TOKEN
     });
+    const code = status.status_code || "IN_PROGRESS";
 
-    console.log(`✅ [SOCIAL] Reel Instagram publié : https://instagram.com/p/${published.id}`);
-    return { postId: published.id };
+    if (code === "FINISHED") {
+        const published = await graphPostForm(`${IG_USER_ID}/media_publish`, {
+            creation_id: creationId,
+            access_token: IG_ACCESS_TOKEN
+        });
+        console.log(`✅ [SOCIAL] Reel Instagram publié : https://instagram.com/p/${published.id}`);
+        return { status: "published", postId: published.id };
+    }
+    if (code === "ERROR" || code === "EXPIRED") {
+        return { status: "error", error: status.status || code };
+    }
+    return { status: "processing", message: status.status || "" };
 }
 
 // ============================================================
@@ -417,17 +458,29 @@ async function publishToAllSocial(hit) {
             console.error("❌ [SOCIAL] Échec publication vidéo Facebook : " + err.message);
         }
 
-        // --- Instagram : Reel (URL vidéo publique : CDN Meta ou URL fournie) ---
+        // --- Instagram : Reel en 2 étapes ---
+        // Étape 1 (ici) : création du conteneur + envoi de la vidéo
+        // (fichier local via rupload, sinon URL publique).
+        // Étape 2 (front) : polling /api/instagram/finalize jusqu'à publication.
+        let reelCreationId = null;
         try {
             const reelUrl = (results.facebook && results.facebook.sourceUrl) || hit.videoUrl || null;
-            results.instagram = await publishInstagramReel(hit, reelUrl, caption);
+            const container = await createInstagramReelContainer(
+                hit,
+                reelUrl,
+                hit.videoPath || null,
+                caption
+            );
+            reelCreationId = container.creationId;
+            results.instagramPendingCreationId = reelCreationId;
+            console.log(`📦 [SOCIAL] Reel Instagram en traitement (${reelCreationId}) — la publication sera finalisée par le client.`);
         } catch (err) {
             results.instagramError = err.message;
-            console.error("❌ [SOCIAL] Échec publication Reel Instagram : " + err.message);
+            console.error("❌ [SOCIAL] Échec création Reel Instagram : " + err.message);
         }
 
-        // Les deux ont réussi -> terminé
-        if (results.facebook && results.instagram) return results;
+        // FB vidéo OK et conteneur IG créé -> le front finalise l'Instagram
+        if (results.facebook && reelCreationId) return results;
 
         // Sinon on retente ce qui a échoué via le flux photo ci-dessous
         console.log("↩️ [SOCIAL] Repli sur le flux photo pour la/les plateforme(s) en échec…");
@@ -443,7 +496,7 @@ async function publishToAllSocial(hit) {
         }
     }
 
-    if (!results.instagram) {
+    if (!results.instagram && !results.instagramPendingCreationId) {
         try {
             const igImageUrl = (results.facebook && results.facebook.imageUrl) ||
                 (hit.coverPath && /^https?:\/\//i.test(hit.coverPath) ? hit.coverPath : null);
@@ -546,6 +599,7 @@ module.exports = {
     publishFacebook,
     publishFacebookVideo,
     publishInstagram,
-    publishInstagramReel,
+    createInstagramReelContainer,
+    finalizeInstagramReel,
     publishToAllSocial
 };
