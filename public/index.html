@@ -38,6 +38,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <!-- Encodeur MP3 côté navigateur : compression intégrée des fichiers trop lourds -->
+    <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.0/lame.min.js"></script>
 
     <!-- Styles custom (interactions spécifiques non couvertes par les utilitaires) -->
     <style>
@@ -489,7 +491,7 @@
                     class="flex flex-col items-center justify-center gap-2 w-full rounded-xl border-2 border-dashed border-purple-700/70 hover:border-orange-500/80 bg-night/60 hover:bg-orange-500/5 cursor-pointer transition-colors duration-200 px-4 py-8 text-center">
                     <i class="fa-solid fa-cloud-arrow-up text-3xl text-orange-400"></i>
                     <span class="text-sm font-semibold text-slate-200">Cliquez pour choisir un fichier MP3</span>
-                    <span class="text-xs text-slate-500">ou glissez-déposez · jusqu'à 100 Mo via le stockage cloud <span class="opacity-70">(4 Mo max en envoi direct sans stockage)</span></span>
+                    <span class="text-xs text-slate-500">ou glissez-déposez · jusqu'à 100 Mo via le stockage cloud <span class="opacity-70">(sinon compression automatique intégrée, 4 Mo max)</span></span>
                     <span id="publish-file-name" class="hidden mt-1 max-w-full truncate text-xs font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-600/40 rounded-md px-2 py-1"></span>
                 </label>
                 <input id="publish-file-input" type="file" accept=".mp3,audio/mpeg,audio/*" class="hidden">

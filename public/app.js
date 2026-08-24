@@ -825,6 +825,77 @@ function appendCommonMetadata(formData) {
 let isCaptionLoading = false;
 
 /**
+ * Compresse un fichier audio côté navigateur : décodage via Web Audio API
+ * puis réencodage MP3 (lamejs) à un débit calculé pour passer sous 4 Mo.
+ * Utilisé en repli quand l'upload direct dépasse la limite Vercel (4,5 Mo)
+ * et que le stockage Blob n'est pas configuré.
+ * @param {File} file fichier audio source
+ * @returns {Promise<{blob: Blob, kbps: number}>}
+ */
+async function compressAudioFile(file) {
+    if (typeof lamejs === "undefined") {
+        throw new Error("Encodeur MP3 (lamejs) non chargé.");
+    }
+
+    // 1. Décodage du fichier source
+    const arrayBuf = await file.arrayBuffer();
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    let decoded;
+    try {
+        decoded = await ctx.decodeAudioData(arrayBuf);
+    } finally {
+        ctx.close().catch(() => {});
+    }
+
+    // 2. Normalisation en 44,1 kHz stéréo (fréquences supportées par lame)
+    const targetRate = 44100;
+    let buffer = decoded;
+    if (decoded.sampleRate !== targetRate || decoded.numberOfChannels > 2) {
+        const frames = Math.max(1, Math.ceil(decoded.duration * targetRate));
+        const offline = new OfflineAudioContext(2, frames, targetRate);
+        const src = offline.createBufferSource();
+        src.buffer = decoded;
+        src.connect(offline.destination);
+        src.start();
+        buffer = await offline.startRendering();
+    }
+    const channels = 2;
+
+    // 3. Débit adaptatif : vise ~3,4 Mo max selon la durée du morceau
+    const budgetBytes = 3.4 * 1024 * 1024;
+    const duration = Math.max(buffer.duration, 1);
+    let kbps = Math.floor((budgetBytes * 8) / duration / 1000);
+    kbps = Math.max(64, Math.min(kbps, 128));
+
+    // 4. Conversion Float32 -> Int16 par canal
+    function floatTo16(input) {
+        const out = new Int16Array(input.length);
+        for (let i = 0; i < input.length; i++) {
+            const s = Math.max(-1, Math.min(1, input[i]));
+            out[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+        }
+        return out;
+    }
+    const left = floatTo16(buffer.getChannelData(0));
+    const right = floatTo16(buffer.getChannelData(Math.min(1, buffer.numberOfChannels - 1)));
+
+    // 5. Encodage MP3
+    const encoder = new lamejs.Mp3Encoder(channels, targetRate, kbps);
+    const blockSize = 1152;
+    const parts = [];
+    for (let i = 0; i < left.length; i += blockSize) {
+        const l = left.subarray(i, i + blockSize);
+        const r = right.subarray(i, i + blockSize);
+        const buf = encoder.encodeBuffer(l, r);
+        if (buf.length > 0) parts.push(new Uint8Array(buf));
+    }
+    const end = encoder.flush();
+    if (end.length > 0) parts.push(new Uint8Array(end));
+
+    return { blob: new Blob(parts, { type: "audio/mpeg" }), kbps };
+}
+
+/**
  * Téléverse un fichier audio vers Vercel Blob (upload direct navigateur).
  * Nécessite que le déploiement ait un store Blob connecté
  * (BLOB_READ_WRITE_TOKEN). Lève une exception sinon.
@@ -979,14 +1050,31 @@ async function performPublish() {
                     console.warn("[Upload & Publier] Upload Blob indisponible :", blobErr.message);
                     // Repli : envoi direct, mais refusé au-delà de ~4 Mo sur Vercel
                     if (file.size > 4 * 1024 * 1024) {
-                        const msg = `<span class="font-semibold">Fichier de ${(file.size / 1024 / 1024).toFixed(1)} Mo : dépasse la limite de 4,5 Mo de Vercel.</span><br>` +
-                            `Pour publier des fichiers de cette taille, activez gratuitement le stockage intégré :<br>` +
-                            `<span class="block mt-1">📊 Tableau de bord Vercel → votre projet → onglet « Storage » → « Create Database » → <b>Blob</b>. ` +
-                            `Le token est ajouté automatiquement, et les fichiers jusqu'à 100 Mo passeront.</span><br>` +
-                            `En attendant : utilisez un MP3 plus léger, ou le mode « Lien » avec une URL MP3 directe.`;
-                        setPublishStatus({ type: "error", html: msg });
-                        toast("Stockage cloud requis pour ce fichier (voir explication).", "error");
-                        return;
+                        // Dernière chance avant d'échouer : compression intégrée
+                        try {
+                            setPublishStatus({ type: "info", html: "Fichier volumineux : compression intégrée en cours… (quelques secondes)" });
+                            const { blob: compressed, kbps } = await compressAudioFile(file);
+
+                            if (compressed.size > 4 * 1024 * 1024) {
+                                throw new Error("la compression n'a pas suffi à passer sous la limite");
+                            }
+
+                            console.log(`[Upload & Publier] Fichier compressé : ${(file.size / 1048576).toFixed(1)} Mo -> ${(compressed.size / 1048576).toFixed(1)} Mo (${kbps} kbps)`);
+                            const fd = new FormData();
+                            fd.append("file", compressed, "chanson-compressee.mp3");
+                            appendCommonMetadata(fd);
+                            sendBody = fd;
+                        } catch (cmpErr) {
+                            console.warn("[Upload & Publier] Compression impossible :", cmpErr.message);
+                            const msg = `<span class="font-semibold">Fichier de ${(file.size / 1024 / 1024).toFixed(1)} Mo : dépasse la limite de 4,5 Mo de Vercel.</span><br>` +
+                                `Pour publier des fichiers de cette taille, activez gratuitement le stockage intégré :<br>` +
+                                `<span class="block mt-1">📊 Tableau de bord Vercel → votre projet → onglet « Storage » → « Create Database » → <b>Blob</b>. ` +
+                                `Le token est ajouté automatiquement, et les fichiers jusqu'à 100 Mo passeront.</span><br>` +
+                                `En attendant : utilisez un MP3 plus léger, ou le mode « Lien » avec une URL MP3 directe.`;
+                            setPublishStatus({ type: "error", html: msg });
+                            toast("Compression impossible : stockage cloud requis.", "error");
+                            return;
+                        }
                     }
                 }
             }
