@@ -37,7 +37,24 @@ git push -u origin main
 | ffmpeg | Embarqué via `ffmpeg-static` (aucune installation) |
 | Vidéos FB / Reels IG | MP4 H.264/AAC 1080x1080 généré depuis pochette + audio |
 
-## 4. Limitations connues
+## 4. Stockage des fichiers audio (fortement recommandé)
+
+Les requêtes serverless Vercel sont limitées à **4,5 Mo** : un MP3 complet
+ne peut pas passer en envoi direct. L'app gère ça via **Vercel Blob**
+(upload direct navigateur → stockage persistant) :
+
+1. Projet Vercel → onglet **Storage** → **Create Database** → **Blob**
+2. Le token `BLOB_READ_WRITE_TOKEN` est ajouté automatiquement
+   aux variables d'environnement du projet.
+3. Redéployez si besoin.
+
+Avantages : fichiers jusqu'à 100 Mo, URLs publiques permanentes utilisées
+comme lien d'écoute dans les posts et la page « Tracks publiés ».
+
+Sans Blob configuré, l'envoi direct de fichier reste possible jusqu'à
+~4 Mo (avec avertissement), et le mode « Lien » fonctionne normalement.
+
+## 5. Limitations connues
 
 - **/tmp éphémère** : les fichiers générés n'existent que pendant l'invocation
   serverless. Pour une persistance réelle des tracks publiés, connectez

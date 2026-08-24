@@ -825,6 +825,22 @@ function appendCommonMetadata(formData) {
 let isCaptionLoading = false;
 
 /**
+ * Téléverse un fichier audio vers Vercel Blob (upload direct navigateur).
+ * Nécessite que le déploiement ait un store Blob connecté
+ * (BLOB_READ_WRITE_TOKEN). Lève une exception sinon.
+ * @returns {Promise<string>} URL publique permanente du fichier
+ */
+async function uploadFileViaBlob(file) {
+    const mod = await import("https://esm.sh/@vercel/blob/client");
+    const blob = await mod.upload(`uploads/${Date.now()}-${file.name}`, file, {
+        access: "public",
+        handleUploadUrl: "/api/upload-url",
+        contentType: file.type || "audio/mpeg",
+    });
+    return blob.url;
+}
+
+/**
  * Préremplit la zone « Texte du post » de la modale via l'IA (Groq).
  * Le texte reste librement modifiable ; en cas d'échec, la légende
  * standard du serveur sera utilisée.
@@ -940,16 +956,51 @@ async function performPublish() {
 
     isPublishing = true;
     setPublishButtonState(true);
-    console.log("[Upload & Publier] Envoi vers /api/publish —", payload.label);
+    let sendBody = payload.formData;
 
     try {
+        // --- Mode fichier : tentative d'upload direct vers Vercel Blob ---
+        // (contourne la limite de 4,5 Mo des requêtes serverless)
+        if (currentPublishMode === PUBLISH_MODE.FILE) {
+            const file = $("publish-file-input").files[0];
+            let blobUrl = null;
+
+            if (file) {
+                try {
+                    setPublishStatus({ type: "info", html: `Envoi du fichier vers le stockage cloud…` });
+                    blobUrl = await uploadFileViaBlob(file);
+                    console.log("[Upload & Publier] Fichier stocké sur Blob :", blobUrl);
+
+                    const fd = new FormData();
+                    fd.append("blobAudioUrl", blobUrl);
+                    appendCommonMetadata(fd);
+                    sendBody = fd;
+                } catch (blobErr) {
+                    console.warn("[Upload & Publier] Upload Blob indisponible :", blobErr.message);
+                    // Repli : envoi direct, mais refusé au-delà de ~4 Mo sur Vercel
+                    if (file.size > 4 * 1024 * 1024) {
+                        const msg = `Fichier trop volumineux (${(file.size / 1024 / 1024).toFixed(1)} Mo). ` +
+                            `Sans stockage cloud configuré, la limite est d'environ 4 Mo en déploiement Vercel. ` +
+                            `Utilisez un fichier plus léger ou le mode « Lien » avec une URL MP3 directe.`;
+                        setPublishStatus({ type: "error", html: escapeHtml(msg) });
+                        toast("Fichier trop volumineux pour l'envoi direct.", "error");
+                        return;
+                    }
+                }
+            }
+        }
+
         setPublishStatus({ type: "info", html: "Génération de la pochette & publication sur Facebook et Instagram en cours…" });
 
-        const res = await fetch("/api/publish", { method: "POST", body: payload.formData });
+        const res = await fetch("/api/publish", { method: "POST", body: sendBody });
         let data;
         try {
             data = await res.json();
         } catch {
+            if (res.status === 413) {
+                throw new Error("Fichier trop volumineux : la limite d'envoi direct est de 4,5 Mo sur Vercel. " +
+                    "Utilisez un fichier MP3 plus léger ou le mode « Lien » avec une URL MP3 directe.");
+            }
             throw new Error(`Réponse serveur illisible (HTTP ${res.status})`);
         }
         console.log("[Upload & Publier] Réponse serveur :", res.status, data);

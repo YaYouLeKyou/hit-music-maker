@@ -540,6 +540,38 @@ app.post("/api/caption", async (req, res) => {
     }
 });
 
+// ============================================================
+// VERCEL BLOB : upload direct navigateur -> stockage persistant
+// Contourne la limite de 4,5 Mo des requêtes serverless.
+// Nécessite BLOB_READ_WRITE_TOKEN (créer un store Blob dans Vercel).
+// ============================================================
+app.post("/api/upload-url", async (req, res) => {
+    if (!process.env.BLOB_READ_WRITE_TOKEN) {
+        return res.status(501).json({
+            error: "Stockage Blob non configuré sur ce déploiement (BLOB_READ_WRITE_TOKEN manquant)."
+        });
+    }
+    try {
+        const { handleUpload } = require("@vercel/blob/client");
+        const jsonResponse = await handleUpload({
+            request: req,
+            body: req.body,
+            onBeforeGenerateToken: async () => ({
+                allowedContentTypes: ["audio/mpeg", "audio/mp3", "audio/mp4", "audio/wav", "audio/ogg", "audio/*"],
+                maximumSizeInBytes: 100 * 1024 * 1024, // 100 Mo max
+                tokenPayload: JSON.stringify({ t: Date.now() }),
+            }),
+            onUploadCompleted: async ({ blob }) => {
+                console.log("[BLOB] Upload terminé :", blob.url);
+            },
+        });
+        res.json(jsonResponse);
+    } catch (err) {
+        console.error("[BLOB] Erreur handleUpload :", err.message);
+        res.status(400).json({ error: err.message });
+    }
+});
+
 /**
  * Extrait le premier objet JSON valide d'une chaîne,
  * en ignorant les balises markdown ```json ... ``` et le texte autour.
@@ -706,12 +738,20 @@ app.post("/api/publish", upload.single('file'), async (req, res) => {
         // dans « Published Tracks » : les liens Suno/Udio expirent ou ne sont
         // pas des fichiers MP3 directs jouables par le navigateur.
         let localAudioUrl = null;
+        // URL persistante (Vercel Blob) utilisée pour les liens d'écoute des posts
+        let persistedAudioUrl = null;
         try {
             if (req.file?.buffer) {
                 // Stockage mémoire (Vercel)
                 localAudioUrl = persistAudioBuffer(req.file.buffer, path.extname(req.file.originalname) || ".mp3");
             } else if (req.file?.path) {
                 localAudioUrl = persistUploadedAudio(req.file.path);
+            } else if (req.body?.blobAudioUrl && /^https?:\/\//i.test(req.body.blobAudioUrl)) {
+                // Fichier téléversé via Vercel Blob : URL publique permanente.
+                // On en télécharge une copie locale (pour la vidéo) et on garde
+                // l'URL Blob comme lien d'écoute durable dans les posts/tracks.
+                persistedAudioUrl = req.body.blobAudioUrl;
+                localAudioUrl = await downloadAudioLocally(persistedAudioUrl);
             } else if (req.body?.audioUrl && /^https?:\/\//i.test(req.body.audioUrl)) {
                 localAudioUrl = await downloadAudioLocally(req.body.audioUrl);
             }
@@ -787,7 +827,7 @@ app.post("/api/publish", upload.single('file'), async (req, res) => {
             generatedTheme: theme,
             stylePrompt,
             songTitle,
-            music: { audioUrl: req.body?.audioUrl || "" },
+            music: { audioUrl: persistedAudioUrl || req.body?.audioUrl || "" },
             coverPath,
             coverBuffer,
             videoPath,
@@ -826,7 +866,7 @@ app.post("/api/publish", upload.single('file'), async (req, res) => {
             },
             coverGenerated,
             coverUrl: publicCoverUrl,
-            audioUrl: localAudioUrl,
+            audioUrl: persistedAudioUrl || localAudioUrl,
             videoGenerated: !!videoPath
         });
 
