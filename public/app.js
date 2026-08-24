@@ -735,6 +735,7 @@ function openPublishModal() {
     document.body.style.overflow = "hidden";
     setPublishMode(currentPublishMode);
     setPublishStatus(null);
+    generateCaptionAI(); // préremplit le texte du post avec l'IA (modifiable)
 }
 
 /** Ferme la fenêtre (bloquée pendant une publication) */
@@ -754,6 +755,7 @@ function resetPublishForm() {
     $("publish-link-input").value = "";
     $("publish-file-input").value = "";
     $("publish-file-name").classList.add("hidden");
+    if ($("publish-caption")) $("publish-caption").value = "";
     setPublishMode(PUBLISH_MODE.LINK);
     setPublishStatus(null);
     setPublishButtonState(false);
@@ -816,6 +818,56 @@ function appendCommonMetadata(formData) {
     formData.append("theme", $("gen-theme") ? $("gen-theme").value.trim() : "");
     formData.append("songTitle", getManualSongTitle());
     formData.append("artistUsed", getSelectedArtistName() || "Artiste Polyvalent");
+    // Texte du post édité dans la modale (vide -> légende standard du serveur)
+    formData.append("caption", $("publish-caption") ? $("publish-caption").value.trim() : "");
+}
+
+let isCaptionLoading = false;
+
+/**
+ * Préremplit la zone « Texte du post » de la modale via l'IA (Groq).
+ * Le texte reste librement modifiable ; en cas d'échec, la légende
+ * standard du serveur sera utilisée.
+ */
+async function generateCaptionAI() {
+    const box = $("publish-caption");
+    const btn = $("btn-caption-regen");
+    if (!box || isCaptionLoading) return;
+
+    isCaptionLoading = true;
+    const oldBtnHtml = btn ? btn.innerHTML : null;
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i>Génération…';
+    }
+    box.value = "";
+    box.placeholder = "L'IA rédige le texte du post…";
+
+    try {
+        const res = await fetch("/api/caption", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                theme: $("gen-theme") ? $("gen-theme").value.trim() : "",
+                stylePrompt: state.stylePrompt.trim(),
+                songTitle: getManualSongTitle(),
+                artistUsed: getSelectedArtistName()
+            })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.caption) throw new Error(data.error || "Génération impossible");
+        box.value = data.caption;
+    } catch (err) {
+        console.warn("[Upload & Publier] Texte IA indisponible :", err.message);
+        box.placeholder = "Texte IA indisponible — la légende standard sera utilisée.";
+        toast("Texte IA indisponible : la légende standard sera utilisée.", "warning");
+    } finally {
+        isCaptionLoading = false;
+        if (btn && oldBtnHtml) {
+            btn.disabled = false;
+            btn.innerHTML = oldBtnHtml;
+        }
+    }
 }
 
 /** Valide la source choisie et renvoie FormData prêt pour /api/publish */
@@ -1326,6 +1378,8 @@ function init() {
     $("btn-publish-cancel").addEventListener("click", closePublishModal);
     $("btn-publish-close").addEventListener("click", closePublishModal);
     $("btn-publish-confirm").addEventListener("click", performPublish);
+    const regenBtn = $("btn-caption-regen");
+    if (regenBtn) regenBtn.addEventListener("click", generateCaptionAI);
     $("modal-publish").addEventListener("click", (e) => {
         if (e.target === $("modal-publish")) closePublishModal();
     });

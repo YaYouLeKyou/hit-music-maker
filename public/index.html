@@ -395,6 +395,21 @@
                 <input id="publish-file-input" type="file" accept=".mp3,audio/mpeg,audio/*" class="hidden">
             </div>
 
+            <!-- Section : texte du post (prérempli par l'IA, modifiable) -->
+            <div class="mt-4">
+                <div class="flex items-center justify-between mb-1">
+                    <label for="publish-caption" class="text-sm font-medium text-slate-300">Texte du post</label>
+                    <button id="btn-caption-regen" type="button"
+                        class="text-xs font-semibold text-orange-400 hover:text-orange-300 transition active:scale-95 disabled:opacity-50">
+                        <i class="fa-solid fa-wand-magic-sparkles mr-1"></i>Régénérer par l'IA
+                    </button>
+                </div>
+                <textarea id="publish-caption" rows="5"
+                    placeholder="Le texte du post sera généré par l'IA…"
+                    class="w-full rounded-lg bg-night border border-purple-800/70 p-3 text-sm outline-none transition-colors duration-200 placeholder:text-slate-500 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/30 resize-y"></textarea>
+                <p class="text-xs text-slate-500 mt-1.5"><i class="fa-solid fa-circle-info mr-1"></i>Prérempli par l'IA et modifiable librement. Le lien d'écoute est ajouté automatiquement.</p>
+            </div>
+
             <!-- Zone de statut / résultat -->
             <div id="publish-status" class="hidden mt-4 rounded-xl border p-4 text-sm"></div>
 

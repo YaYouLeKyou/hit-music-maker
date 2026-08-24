@@ -401,7 +401,9 @@ async function publishInstagramReel(hit, videoUrl, caption) {
  * Retourne { facebook: {...}|null, instagram: {...}|null }.
  */
 async function publishToAllSocial(hit) {
-    const caption = buildCaption(hit);
+    // Texte du post rédigé dans la modale (prérempli par l'IA, modifiable),
+    // sinon légende standard générée par buildCaption().
+    const caption = (hit.customCaption && String(hit.customCaption).trim()) || buildCaption(hit);
     const results = { facebook: null, instagram: null };
     const hasVideo = !!(hit.videoPath || hit.videoUrl);
 

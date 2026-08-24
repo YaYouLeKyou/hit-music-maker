@@ -463,6 +463,87 @@ app.get("/api/udio/status/:taskId", async (req, res) => {
  * Extrait le premier objet JSON valide d'une chaîne,
  * en ignorant les balises markdown ```json ... ``` et le texte autour.
  */
+/**
+ * Route POST /api/caption
+ * Body : { theme, stylePrompt, songTitle, artistUsed }
+ * Rédige le texte du post social (Facebook/Instagram) via Groq.
+ * Le texte reste entièrement modifiable côté client avant publication.
+ */
+app.post("/api/caption", async (req, res) => {
+    try {
+        const { apiKey: clientKey } = req.body || {};
+        const apiKey = clientKey && typeof clientKey === "string" && clientKey.trim().length >= 10
+            ? clientKey.trim()
+            : process.env.GROQ_API_KEY;
+
+        if (!apiKey || apiKey.trim().length < 10) {
+            return res.status(400).json({ error: "Clé API Groq manquante ou invalide." });
+        }
+
+        const { theme = "", stylePrompt = "", songTitle = "", artistUsed = "" } = req.body || {};
+
+        const systemPrompt = [
+            "Tu es community manager de la page musicale « Music Hit Maker ».",
+            "Rédige le texte d'une publication Facebook/Instagram pour annoncer une nouvelle chanson.",
+            "",
+            "CONSIGNES STRICTES :",
+            "- Français, ton enthousiaste et accrocheur.",
+            "- 2 à 4 phrases courtes maximum.",
+            "- 2 ou 3 emojis bien placés, pas plus.",
+            "- Termine par une ligne de 4 à 6 hashtags pertinents.",
+            "- N'inclus PAS de lien d'écoute (il est ajouté automatiquement par le système).",
+            "- Ne mentionne pas explicitement que la chanson est générée par IA.",
+            "- Réponds UNIQUEMENT avec le texte du post : pas de guillemets, pas de commentaire, pas de titre."
+        ].join("\n");
+
+        const userDetails = [
+            songTitle ? `Titre de la chanson : « ${String(songTitle).slice(0, 80)} »` : null,
+            artistUsed ? `Artiste : ${String(artistUsed).slice(0, 60)}` : null,
+            theme ? `Thème/inspiration : ${String(theme).slice(0, 300)}` : null,
+            stylePrompt ? `Style musical : ${String(stylePrompt).slice(0, 300)}` : null
+        ].filter(Boolean).join("\n") || "Chanson inédite du répertoire de la page.";
+
+        const groqResponse = await fetch(GROQ_API_URL, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${apiKey}`
+            },
+            body: JSON.stringify({
+                model: GROQ_MODEL,
+                temperature: 1,
+                max_tokens: 400,
+                messages: [
+                    { role: "system", content: systemPrompt },
+                    { role: "user", content: userDetails }
+                ]
+            })
+        });
+
+        if (!groqResponse.ok) {
+            const detail = await groqResponse.text().catch(() => "");
+            return res.status(502).json({
+                error: `Erreur API Groq (${groqResponse.status}) : ${detail.slice(0, 200) || "réponse inattendue"}`
+            });
+        }
+
+        const data = await groqResponse.json();
+        const caption = data?.choices?.[0]?.message?.content?.trim() || "";
+        if (!caption) {
+            return res.status(502).json({ error: "Groq n'a renvoyé aucun texte." });
+        }
+
+        res.json({ caption });
+    } catch (err) {
+        console.error("[CAPTION] Erreur :", err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+/**
+ * Extrait le premier objet JSON valide d'une chaîne,
+ * en ignorant les balises markdown ```json ... ``` et le texte autour.
+ */
 function extractJson(text) {
     const cleaned = text.replace(/```(?:json)?/gi, "").trim();
     const start = cleaned.indexOf("{");
@@ -616,6 +697,7 @@ app.post("/api/publish", upload.single('file'), async (req, res) => {
             stylePrompt = "",
             theme = "",
             songTitle = "",
+            caption = "",          // texte du post rédigé dans la modale (prérempli IA)
             artistUsed = "Artiste Polyvalent"
         } = req.body;
         console.log(`[PUBLISH] Metadata - Style: ${stylePrompt.substring(0, 30)}..., Artist: ${artistUsed}`);
@@ -708,7 +790,8 @@ app.post("/api/publish", upload.single('file'), async (req, res) => {
             music: { audioUrl: req.body?.audioUrl || "" },
             coverPath,
             coverBuffer,
-            videoPath
+            videoPath,
+            customCaption: typeof caption === "string" ? caption.trim() : ""
         });
 
         const fbOk = !!publishResult.facebook;
