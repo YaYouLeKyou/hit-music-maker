@@ -495,6 +495,109 @@ function deriveSongTitle() {
     return firstLine ? firstLine.slice(0, 60) : "Sans titre";
 }
 
+/**
+ * Clic « Publier en direct » : redirige vers le paiement Stripe Checkout.
+ * Après paiement, l'utilisateur revient sur la page avec ?order=xxx
+ * et pollPaidOrder() prend le relais (génération + publication auto).
+ */
+async function startDirectPublishFlow() {
+    const lyrics = buildLyricsPrompt();
+    const style = state.stylePrompt.trim();
+    if (!lyrics && !style) {
+        showMusicError("Ajoutez des paroles ou un style prompt avant de publier.");
+        return;
+    }
+
+    const btn = $("btn-generate-music");
+    btn.disabled = true;
+    setMusicStatus("Préparation du paiement sécurisé Stripe…", 5);
+
+    try {
+        const res = await fetch("/api/stripe/checkout", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                title: deriveSongTitle(),
+                stylePrompt: style,
+                lyrics,
+                theme: $("gen-theme") ? $("gen-theme").value.trim() : "",
+                artistUsed: getSelectedArtistName()
+            })
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data?.url) throw new Error(data?.error || `HTTP ${res.status}`);
+        console.log("[Publier en direct] Redirection vers Stripe Checkout :", data.orderId);
+        window.location.href = data.url;
+    } catch (err) {
+        console.error("[Publier en direct] Erreur :", err.message);
+        showMusicError("Service de paiement indisponible : " + err.message);
+        setMusicStatus(null);
+        btn.disabled = false;
+    }
+}
+
+/**
+ * Suit une commande payée (?order=xxx dans l'URL) : polling du statut,
+ * puis publication automatique sur FB/IG quand la musique est prête.
+ */
+async function pollPaidOrder(orderId) {
+    let attempts = 0;
+    const MAX_ATTEMPTS = 60;
+
+    async function tick() {
+        attempts++;
+        try {
+            const res = await fetch(`/api/order/${encodeURIComponent(orderId)}/status`);
+            const o = await res.json().catch(() => null);
+            if (!res.ok || !o) throw new Error(o?.error || `HTTP ${res.status}`);
+
+            if (o.status === "pending_payment") {
+                if (attempts >= MAX_ATTEMPTS) { showMusicError("Délai dépassé en attente du paiement."); return; }
+                setMusicStatus("En attente de confirmation du paiement…", 10);
+                setTimeout(tick, 5000);
+                return;
+            }
+
+            if (o.status === "generating") {
+                if (attempts >= MAX_ATTEMPTS) {
+                    showMusicError("La génération prend plus de temps que prévu. Votre chanson reste liée à cette commande — rechargez la page plus tard avec ce même lien.");
+                    return;
+                }
+                const pct = Math.min(90, 20 + attempts * 3);
+                renderSunoSteps(pct >= 75 ? 3 : pct >= 45 ? 2 : 1);
+                setMusicStatus("Paiement confirmé ✅ — génération de votre chanson via Suno…", pct);
+                setTimeout(tick, 6000);
+                return;
+            }
+
+            if (o.status === "done" && Array.isArray(o.tracks)) {
+                finishSunoPolling(true, null, o.tracks, "suno");
+                return;
+            }
+
+            if (o.status === "refunded") {
+                showMusicError("Votre paiement a été remboursé automatiquement : la génération n'a pas pu être lancée (aucun frais n'a été retenu).");
+                setMusicStatus(null);
+                $("btn-generate-music").disabled = false;
+                return;
+            }
+
+            if (o.status === "failed") {
+                showMusicError("Échec de la génération côté Suno après engagement des crédits. Contactez-nous pour un remboursement manuel.");
+                setMusicStatus(null);
+                $("btn-generate-music").disabled = false;
+                return;
+            }
+
+            setTimeout(tick, 6000);
+        } catch (err) {
+            if (attempts >= MAX_ATTEMPTS) { showMusicError("Suivi de commande impossible : " + err.message); return; }
+            setTimeout(tick, 8000);
+        }
+    }
+    tick();
+}
+
 /** Soumet le morceau à Suno puis, en cas d'échec, bascule automatiquement sur Udio */
 async function generateMusicOnSuno() {
     const lyrics = buildLyricsPrompt();
@@ -1504,8 +1607,18 @@ function init() {
         copyToClipboard(style, "Style Prompt copié !");
     });
 
-    // --- CTA final : Générer ma musique (injection automatique dans Suno) ---
-    $("btn-generate-music").addEventListener("click", generateMusicOnSuno);
+    // --- CTA final : Publier en direct (paiement Stripe puis génération auto) ---
+    $("btn-generate-music").addEventListener("click", startDirectPublishFlow);
+
+    // --- Retour de Stripe Checkout (?order=xxx) ou paiement annulé ---
+    const urlParams = new URLSearchParams(window.location.search);
+    const paidOrder = urlParams.get("order");
+    if (paidOrder) {
+        history.replaceState(null, "", window.location.pathname);
+        pollPaidOrder(paidOrder);
+    } else if (urlParams.get("canceled")) {
+        toast("Paiement annulé — aucun montant n'a été débité.", "warning");
+    }
 
     // --- Bouton Upload & Publier (ouvre la modale) ---
     if ($("btn-upload-publish")) {

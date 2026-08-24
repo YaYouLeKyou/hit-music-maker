@@ -19,7 +19,12 @@ const PORT = process.env.PORT || 3000;
 
 // --- Middleware ---
 app.use(cors());
-app.use(express.json({ limit: "1mb" }));
+// Le webhook Stripe exige le corps BRUT pour vérifier la signature :
+// on ne parse pas le JSON sur ce chemin précis.
+app.use((req, res, next) => {
+    if (req.path === "/api/stripe/webhook") return next();
+    return express.json({ limit: "1mb" })(req, res, next);
+});
 
 // --- Fichiers statiques (frontend) ---
 app.use(express.static(path.join(__dirname, "public")));
@@ -27,6 +32,95 @@ app.use(express.static(path.join(__dirname, "public")));
 // --- Configuration Groq ---
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_MODEL = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
+
+// --- Configuration Stripe (« Publier en direct » : service payant) ---
+const STRIPE_ENABLED = !!process.env.STRIPE_SECRET_KEY;
+let stripe = null;
+if (STRIPE_ENABLED) {
+    try {
+        stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+    } catch (e) {
+        console.warn("[STRIPE] SDK non chargé :", e.message);
+    }
+}
+const STRIPE_PRICE_EUR = Math.max(0.5, parseFloat(process.env.STRIPE_PRICE_EUR || "1.99"));
+
+/** Sauvegarde une commande JSON dans Blob (chemin déterministe). */
+async function saveOrder(order) {
+    const { put } = require("@vercel/blob");
+    await put(`orders/${order.id}.json`, JSON.stringify(order), {
+        access: "public",
+        addRandomSuffix: false,
+        contentType: "application/json"
+    });
+}
+
+/** Charge une commande depuis Blob ; null si absente/indisponible. */
+async function loadOrder(orderId) {
+    if (!orderId || !/^[a-z0-9-]{6,64}$/i.test(orderId)) return null;
+    try {
+        const { head } = require("@vercel/blob");
+        const meta = await head(`orders/${orderId}.json`);
+        const res = await fetch(meta.url);
+        if (!res.ok) return null;
+        return await res.json();
+    } catch {
+        return null;
+    }
+}
+
+/** Soumet une tâche de génération à Suno. Rejette avec un message clair sinon. */
+async function submitSunoTask({ title, stylePrompt, lyrics }) {
+    const sunoResponse = await fetch(`${SUNO_API_BASE}/generate`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${SUNO_API_KEY}`
+        },
+        body: JSON.stringify({
+            customMode: true,
+            instrumental: false,
+            model: SUNO_MODEL,
+            title: String(title || "Sans titre").slice(0, 80),
+            style: String(stylePrompt || "").slice(0, 1000),
+            prompt: String(lyrics || "").slice(0, 5000),
+            callBackUrl: process.env.SUNO_CALLBACK_URL || "https://example.com/music-hit-maker-callback"
+        })
+    });
+
+    const data = await sunoResponse.json().catch(() => null);
+    if (!sunoResponse.ok || !data || data.code !== 200) {
+        if (data && data.code === 429) throw new Error("Crédits Suno insuffisants.");
+        throw new Error(data?.msg || `réponse inattendue (${sunoResponse.status})`);
+    }
+    const taskId = data?.data?.taskId;
+    if (!taskId) throw new Error("Suno n'a pas renvoyé de taskId.");
+    return taskId;
+}
+
+/** Interroge Suno pour un taskId. Retourne { status, tracks }. */
+async function fetchSunoTracks(taskId) {
+    const sunoResponse = await fetch(
+        `${SUNO_API_BASE}/generate/record-info?taskId=${encodeURIComponent(taskId)}`,
+        { headers: { Authorization: `Bearer ${SUNO_API_KEY}` } }
+    );
+    const data = await sunoResponse.json().catch(() => null);
+    if (!sunoResponse.ok || !data || data.code !== 200) return { status: "UNKNOWN", tracks: [] };
+    const d = data.data || {};
+    let tracks = [];
+    if (d.response && Array.isArray(d.response.sunoData)) {
+        tracks = d.response.sunoData
+            .map((t) => ({
+                id: t.id || "",
+                title: t.title || "Sans titre",
+                audioUrl: t.audioUrl || t.sourceAudioUrl || null,
+                streamAudioUrl: t.streamAudioUrl || null,
+                duration: typeof t.duration === "number" ? t.duration : null
+            }))
+            .filter((t) => t.audioUrl || t.streamAudioUrl);
+    }
+    return { status: d.status || "UNKNOWN", tracks };
+}
 
 // --- Configuration Suno (API non-officielle type sunoapi.org / apibox) ---
 const SUNO_API_BASE = process.env.SUNO_API_BASE || "https://api.sunoapi.org/api/v1";
@@ -338,6 +432,145 @@ app.get("/api/suno/status/:taskId", async (req, res) => {
     } catch (err) {
         console.error("[suno] Erreur status :", err);
         res.status(500).json({ error: "Erreur interne du serveur : " + err.message });
+    }
+});
+
+// ============================================================
+// STRIPE — « Publier en direct » (service payant)
+// ============================================================
+
+/** POST /api/stripe/checkout — body: { title, stylePrompt, lyrics, theme, artistUsed } */
+app.post("/api/stripe/checkout", async (req, res) => {
+    try {
+        if (!STRIPE_ENABLED || !stripe) {
+            return res.status(501).json({
+                error: "Le service « Publier en direct » est momentanément indisponible (paiement non configuré). Utilisez « Upload & Publier », gratuit."
+            });
+        }
+        const { title = "", stylePrompt = "", lyrics = "", theme = "", artistUsed = "" } = req.body || {};
+        if (!stylePrompt?.trim() && !lyrics?.trim()) {
+            return res.status(400).json({ error: "Lyrics ou Style Prompt requis." });
+        }
+
+        const orderId = `ord-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        await saveOrder({
+            id: orderId,
+            createdAt: new Date().toISOString(),
+            status: "pending_payment",
+            params: { title: String(title).slice(0, 80), stylePrompt: String(stylePrompt).slice(0, 1000), lyrics: String(lyrics).slice(0, 5000) },
+            meta: { theme: String(theme).slice(0, 300), artistUsed: String(artistUsed).slice(0, 60) }
+        });
+
+        const origin = process.env.PUBLIC_BASE_URL || req.headers.origin || `http://localhost:${PORT}`;
+        const session = await stripe.checkout.sessions.create({
+            mode: "payment",
+            line_items: [{
+                quantity: 1,
+                price_data: {
+                    currency: "eur",
+                    unit_amount: Math.round(STRIPE_PRICE_EUR * 100),
+                    product_data: { name: "Publication en direct — Music Hit Maker" }
+                }
+            }],
+            metadata: { orderId },
+            success_url: `${origin}/?order=${orderId}`,
+            cancel_url: `${origin}/?canceled=1`
+        });
+
+        console.log(`[STRIPE] Session créée pour ${orderId} (${STRIPE_PRICE_EUR} €)`);
+        res.json({ url: session.url, orderId });
+    } catch (err) {
+        console.error("[STRIPE] Erreur checkout :", err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+/** POST /api/stripe/webhook — corps brut requis (signature Stripe). */
+app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async (req, res) => {
+    let event;
+    try {
+        event = await stripe.webhooks.constructEventAsync(
+            req.body,
+            req.headers["stripe-signature"],
+            process.env.STRIPE_WEBHOOK_SECRET || ""
+        );
+    } catch (err) {
+        console.error("[STRIPE] Webhook signature invalide :", err.message);
+        return res.status(400).json({ error: `Webhook signature invalide : ${err.message}` });
+    }
+
+    if (event.type === "checkout.session.completed") {
+        const session = event.data.object;
+        const orderId = session.metadata?.orderId;
+        if (!orderId) return res.json({ received: true });
+
+        const order = await loadOrder(orderId);
+        if (!order) return res.json({ received: true });
+
+        // Anti-replay : chaque commande n'est traitée qu'une seule fois
+        if (order.status !== "pending_payment") return res.json({ received: true });
+
+        order.paymentId = session.payment_intent || null;
+        order.status = "generating";
+        await saveOrder(order);
+        console.log(`[STRIPE] Paiement validé pour ${orderId} — lancement Suno…`);
+
+        try {
+            // Frais Suno engagés seulement à partir de ce point
+            order.taskId = await submitSunoTask(order.params);
+            await saveOrder(order);
+        } catch (err) {
+            // Aucun frais Suno engagé -> remboursement automatique
+            console.error(`[STRIPE] Génération impossible pour ${orderId} : ${err.message} — remboursement.`);
+            try {
+                if (session.payment_intent) {
+                    await stripe.refunds.create({ payment_intent: session.payment_intent });
+                }
+                order.status = "refunded";
+                order.error = err.message;
+                await saveOrder(order);
+            } catch (refErr) {
+                console.error("[STRIPE] Remboursement impossible :", refErr.message);
+                order.status = "failed";
+                order.error = `${err.message} | Remboursement manuel requis (${refErr.message})`;
+                await saveOrder(order);
+            }
+        }
+    }
+
+    res.json({ received: true });
+});
+
+/** GET /api/order/:id/status — polling du front. */
+app.get("/api/order/:id/status", async (req, res) => {
+    try {
+        const order = await loadOrder(req.params.id);
+        if (!order) return res.status(404).json({ error: "Commande introuvable." });
+
+        // Avance le statut quand une tâche Suno est en cours
+        if (order.status === "generating" && order.taskId && !order.tracks) {
+            const { status, tracks } = await fetchSunoTracks(order.taskId);
+            if (/SUCCESS/i.test(status) && tracks.length > 0) {
+                order.status = "done";
+                order.tracks = tracks;
+                await saveOrder(order);
+            } else if (/FAILED|ERROR|SUBSCRIBE/i.test(status)) {
+                // Crédits Suno consommés -> pas de remboursement auto (règle métier)
+                order.status = "failed";
+                order.error = "La génération a échoué côté Suno après engagement des crédits.";
+                await saveOrder(order);
+            }
+        }
+
+        res.json({
+            id: order.id,
+            status: order.status,
+            error: order.error || null,
+            tracks: order.tracks || null
+        });
+    } catch (err) {
+        console.error("[ORDER] Erreur statut :", err.message);
+        res.status(500).json({ error: err.message });
     }
 });
 

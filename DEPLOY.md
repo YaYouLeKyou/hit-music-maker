@@ -54,7 +54,27 @@ comme lien d'écoute dans les posts et la page « Tracks publiés ».
 Sans Blob configuré, l'envoi direct de fichier reste possible jusqu'à
 ~4 Mo (avec avertissement), et le mode « Lien » fonctionne normalement.
 
-## 5. Limitations connues
+## 5. Paiement Stripe (« Publier en direct »)
+
+Le bouton « Publier en direct » est un **service payant** (1,99 € par défaut,
+ajustable via `STRIPE_PRICE_EUR`) :
+
+1. Créez un compte sur **stripe.com** (gratuit, KYC identité + IBAN)
+2. Ajoutez les variables d'environnement :
+   - `STRIPE_SECRET_KEY` : clé secrète (Developers → API keys)
+   - `STRIPE_WEBHOOK_SECRET` : Developers → Webhooks → endpoint
+     `https://votre-app.vercel.app/api/stripe/webhook`
+     → événement à écouter : `checkout.session.completed`
+3. Vercel Blob doit être actif (les commandes y sont persistées)
+
+Règles intégrées :
+- 1 paiement = 1 génération (anti-abus, commande marquée consommée)
+- Remboursement automatique si la génération ne peut pas être lancée
+  (aucun frais Suno engagé)
+- Pas de remboursement auto si Suno a échoué après engagement des crédits
+  (remboursement manuel possible depuis le dashboard Stripe)
+
+## 6. Limitations connues
 
 - **/tmp éphémère** : les fichiers générés n'existent que pendant l'invocation
   serverless. Pour une persistance réelle des tracks publiés, connectez
