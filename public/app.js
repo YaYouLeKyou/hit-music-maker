@@ -979,11 +979,13 @@ async function performPublish() {
                     console.warn("[Upload & Publier] Upload Blob indisponible :", blobErr.message);
                     // Repli : envoi direct, mais refusé au-delà de ~4 Mo sur Vercel
                     if (file.size > 4 * 1024 * 1024) {
-                        const msg = `Fichier trop volumineux (${(file.size / 1024 / 1024).toFixed(1)} Mo). ` +
-                            `Sans stockage cloud configuré, la limite est d'environ 4 Mo en déploiement Vercel. ` +
-                            `Utilisez un fichier plus léger ou le mode « Lien » avec une URL MP3 directe.`;
-                        setPublishStatus({ type: "error", html: escapeHtml(msg) });
-                        toast("Fichier trop volumineux pour l'envoi direct.", "error");
+                        const msg = `<span class="font-semibold">Fichier de ${(file.size / 1024 / 1024).toFixed(1)} Mo : dépasse la limite de 4,5 Mo de Vercel.</span><br>` +
+                            `Pour publier des fichiers de cette taille, activez gratuitement le stockage intégré :<br>` +
+                            `<span class="block mt-1">📊 Tableau de bord Vercel → votre projet → onglet « Storage » → « Create Database » → <b>Blob</b>. ` +
+                            `Le token est ajouté automatiquement, et les fichiers jusqu'à 100 Mo passeront.</span><br>` +
+                            `En attendant : utilisez un MP3 plus léger, ou le mode « Lien » avec une URL MP3 directe.`;
+                        setPublishStatus({ type: "error", html: msg });
+                        toast("Stockage cloud requis pour ce fichier (voir explication).", "error");
                         return;
                     }
                 }
