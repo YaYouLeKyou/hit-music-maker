@@ -548,6 +548,10 @@ function persistAudioBuffer(buffer, ext) {
  * ne sont pas des MP3 directs). Retourne l'URL locale.
  */
 async function downloadAudioLocally(audioUrl) {
+    // Message explicite pour les liens de partage Suno (page HTML, pas un MP3)
+    if (/suno\.com\/s\//i.test(audioUrl)) {
+        throw new Error("lien de partage suno.com/s/ détecté : ce n'est pas un MP3 direct. Utilisez l'URL CDN retournée par l'API (ex : https://cdn1.suno.ai/xxxx.mp3) ou téléversez le fichier.");
+    }
     const res = await fetch(audioUrl, { redirect: "follow" });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const contentType = res.headers.get("content-type") || "";
@@ -633,49 +637,54 @@ app.post("/api/publish", upload.single('file'), async (req, res) => {
             console.warn("[PUBLISH] Audio non téléchargeable localement : " + audioErr.message);
         }
 
-        // Generate cover : tente l'API Hugging Face si disponible, sinon pochette de secours locale
-        let coverPath = null;
+        // Génère la pochette : Stable Diffusion (HF) sinon fallback local.
+        // La pochette est conservée EN MÉMOIRE (coverBuffer) pour l'upload
+        // Facebook — indispensable sur Vercel où le disque est en lecture
+        // seule. Une copie fichier est écrite dans la zone inscriptible
+        // (/tmp sur Vercel) pour l'encodage vidéo et le service /uploads/.
+        let coverPath = null;      // fichier (lecture ffmpeg / URL statique)
+        let coverBuffer = null;    // mémoire (upload FB direct)
         let coverGenerated = false;
         try {
             if (typeof social.generateHFArtwork === "function" && process.env.HF_API_KEY) {
-                console.log("[PUBLISH] Generating cover with Stable Diffusion (HF API)");
-                const coverResult = await social.generateHFArtwork(stylePrompt || artistUsed, process.env.HF_API_KEY);
-                coverPath = coverResult?.path || coverResult?.url || null;
+                console.log("[PUBLISH] Génération pochette via Stable Diffusion (HF)");
+                const hf = await social.generateHFArtwork(stylePrompt || artistUsed, process.env.HF_API_KEY);
+                coverBuffer = hf?.buffer || null;
             } else {
-                console.log("[PUBLISH] HF artwork indisponible — génération de la pochette de secours locale");
+                console.log("[PUBLISH] HF indisponible — pochette de secours locale");
             }
-
-            if (!coverPath || !/^https?:\/\//i.test(coverPath)) {
-                if (!coverPath || !require("fs").existsSync(coverPath)) {
-                    coverPath = generateFallbackCover(path.join(__dirname, "public", "covers"));
-                }
-                coverGenerated = true;
-            }
-            console.log(`[PUBLISH] Cover ready: ${coverPath}`);
-        } catch (coverErr) {
-            console.warn("[PUBLISH] Cover generation failed, using fallback:", coverErr.message);
-            try {
-                coverPath = generateFallbackCover(path.join(__dirname, "public", "covers"));
-                coverGenerated = true;
-            } catch (fbErr) {
-                console.error("[PUBLISH] Fallback cover generation failed:", fbErr.message);
-                coverPath = null;
-            }
+        } catch (hfErr) {
+            console.warn("[PUBLISH] Échec HF (" + hfErr.message + ") — fallback local");
         }
 
-        // URL publique de la pochette (fichier sous public/ ou URL distante)
-        const publicCoverUrl = coverPath
-            ? (/^https?:\/\//i.test(coverPath)
-                ? coverPath
-                : "/" + path.relative(path.join(__dirname, "public"), coverPath).split(path.sep).join("/"))
-            : null;
+        try {
+            if (coverBuffer) {
+                // Sauvegarde du buffer HF dans la zone inscriptible
+                coverPath = path.join(PUBLIC_UPLOADS_DIR, `cover-${Date.now()}.png`);
+                require("fs").writeFileSync(coverPath, coverBuffer);
+            } else {
+                // Fallback PNG généré localement puis chargé en mémoire
+                coverPath = generateFallbackCover(PUBLIC_UPLOADS_DIR);
+                coverBuffer = require("fs").readFileSync(coverPath);
+            }
+            coverGenerated = true;
+            console.log(`[PUBLISH] Cover prête : ${coverPath}`);
+        } catch (fbErr) {
+            console.error("[PUBLISH] Pochette impossible :", fbErr.message);
+            coverPath = null;
+            coverBuffer = null;
+        }
+
+        // URL publique de la pochette : servie par express.static (local) ou
+        // par la route dynamique /uploads/:file (/tmp sur Vercel)
+        const publicCoverUrl = coverPath ? `/uploads/${path.basename(coverPath)}` : null;
 
         console.log(`[PUBLISH] Caption: ${social.buildCaption({ stylePrompt, artistUsed }).substring(0, 50)}...`);
 
         // --- Génération de la vidéo (pochette + audio) pour Facebook/Reels ---
-        // Nécessite un audio LOCAL + une pochette locale.
+        // Nécessite un audio LOCAL + une pochette fichier.
         let videoPath = null;
-        if (localAudioUrl && coverPath && !/^https?:\/\//i.test(coverPath)) {
+        if (localAudioUrl && coverPath) {
             try {
                 const { createCoverVideo } = require("./video_maker.js");
                 const audioFile = path.join(PUBLIC_UPLOADS_DIR, path.basename(localAudioUrl));
@@ -698,6 +707,7 @@ app.post("/api/publish", upload.single('file'), async (req, res) => {
             songTitle,
             music: { audioUrl: req.body?.audioUrl || "" },
             coverPath,
+            coverBuffer,
             videoPath
         });
 

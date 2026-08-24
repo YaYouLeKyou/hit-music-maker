@@ -40,9 +40,12 @@ const NL = String.fromCharCode(10);
 // Légende commune (caption)
 // ============================================================
 
+// Nom d'artiste affiché sur les publications (page Facebook/Instagram)
+const POST_ARTIST_NAME = "Music Hit Maker";
+
 function buildCaption(hit) {
     const lines = [
-        "🎵 CHANSON DU JOUR — Music Hit Maker Studio",
+        "🎵 CHANSON DU JOUR — " + POST_ARTIST_NAME,
         "",
     ];
 
@@ -52,7 +55,7 @@ function buildCaption(hit) {
     }
 
     lines.push(
-        "🎤 Artiste : " + (hit.artistUsed || "Artiste Polyvalent"),
+        "🎤 Artiste : " + POST_ARTIST_NAME,
         "💭 Thème : " + (hit.generatedTheme || "Création originale").slice(0, 200),
     );
 
@@ -148,10 +151,11 @@ function sleep(ms) {
 
 /**
  * Publie la chanson du jour sur la Page Facebook.
- * - Avec pochette locale : upload photo + caption.
- * - Avec pochette URL : photo via paramètre url.
- * - Sans pochette : simple post texte (/feed).
- * Retourne { postId, imageUrl|null }.
+ * Ordre de priorité pour la pochette :
+ *   1. URL publique existante (hit.coverPath http)
+ *   2. Buffer en mémoire (hit.coverBuffer) — fonctionne même sur Vercel
+ *   3. Fichier local (hit.coverPath)
+ *   4. Rien -> simple post texte (/feed)
  */
 async function publishFacebook(hit, caption) {
     if (!FB_PAGE_ID || !FB_PAGE_ACCESS_TOKEN) {
@@ -173,7 +177,25 @@ async function publishFacebook(hit, caption) {
         return { postId, imageUrl: hit.coverPath };
     }
 
-    // Cas 2 : pochette locale (fichier)
+    // Cas 2 : pochette en mémoire (buffer) — aucun disque requis
+    if (hit.coverBuffer && Buffer.isBuffer(hit.coverBuffer) && hit.coverBuffer.length > 100) {
+        const data = await uploadPhotoToFacebook(hit.coverBuffer, "cover.jpg", caption);
+        const postId = data.post_id || data.id;
+        console.log(`✅ [SOCIAL] Facebook publié (photo mémoire) : https://facebook.com/${postId}`);
+
+        let imageUrl = null;
+        try {
+            const info = await graphGet(data.id, { fields: "images", access_token: FB_PAGE_ACCESS_TOKEN });
+            if (Array.isArray(info.images) && info.images.length) {
+                imageUrl = info.images[0].source;
+            }
+        } catch (e) {
+            console.warn("⚠️ [SOCIAL] Impossible de récupérer l'URL de la photo FB : " + e.message);
+        }
+        return { postId, imageUrl };
+    }
+
+    // Cas 3 : pochette locale (fichier)
     if (hit.coverPath && fs.existsSync(hit.coverPath)) {
         const buffer = fs.readFileSync(hit.coverPath);
         const data = await uploadPhotoToFacebook(buffer, path.basename(hit.coverPath), caption);
@@ -502,13 +524,11 @@ async function generateHFArtwork(prompt, apiKey, model = HF_DEFAULT_MODEL) {
                 continue;
             }
 
-            const outDir = path.join(__dirname, "public", "covers");
-            if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+            // Aucune écriture disque ici : le buffer est renvoyé à l'appelant
+            // (le filesystem est en lecture seule sur Vercel).
             const ext = contentType.includes("jpeg") ? ".jpg" : ".png";
-            const filePath = path.join(outDir, `cover_hf_${Date.now()}${ext}`);
-            fs.writeFileSync(filePath, buffer);
-            console.log(`✅ [HF] Pochette générée : ${filePath} (${(buffer.length / 1024).toFixed(0)} Ko)`);
-            return { path: filePath };
+            console.log(`✅ [HF] Pochette générée en mémoire (${(buffer.length / 1024).toFixed(0)} Ko, ${ext})`);
+            return { buffer, ext };
         } catch (err) {
             lastError = err;
             console.warn("⚠️ [HF] Erreur endpoint : " + err.message);
