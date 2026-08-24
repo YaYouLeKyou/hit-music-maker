@@ -460,69 +460,252 @@ function extractJson(text) {
 }
 
 // --- Multer configuration for file uploads ---
+// Le dossier de destination doit exister sinon Multer échoue.
+const UPLOADS_DIR = path.join(__dirname, "uploads");
+if (!require("fs").existsSync(UPLOADS_DIR)) {
+    require("fs").mkdirSync(UPLOADS_DIR, { recursive: true });
+    console.log("[PUBLISH] Dossier uploads/ créé.");
+}
+
+// --- Dossier d'écriture pour les fichiers générés à l'exécution ---
+// En local : public/uploads (servi par express.static).
+// Sur Vercel (serverless) : filesystem en lecture seule sauf /tmp,
+// donc on écrit dans /tmp et une route dynamique /uploads/:file sert les fichiers.
+const IS_SERVERLESS = !!process.env.VERCEL;
+const PUBLIC_UPLOADS_DIR = IS_SERVERLESS
+    ? require("os").tmpdir()
+    : path.join(__dirname, "public", "uploads");
+if (!require("fs").existsSync(PUBLIC_UPLOADS_DIR)) {
+    require("fs").mkdirSync(PUBLIC_UPLOADS_DIR, { recursive: true });
+}
+
+// Route de secours : sert les fichiers générés à l'exécution quand
+// express.static ne les trouve pas (cas Vercel / dossier temporaire).
+app.get("/uploads/:filename", (req, res) => {
+    const filename = path.basename(req.params.filename); // anti path-traversal
+    const filePath = path.join(PUBLIC_UPLOADS_DIR, filename);
+    if (!require("fs").existsSync(filePath)) {
+        return res.status(404).json({ error: "Fichier non trouvé (il a peut-être expiré)." });
+    }
+    const ext = path.extname(filename).toLowerCase();
+    const mime = ext === ".mp3" ? "audio/mpeg"
+        : ext === ".wav" ? "audio/wav"
+        : ext === ".ogg" ? "audio/ogg"
+        : ext === ".m4a" ? "audio/mp4"
+        : ext === ".mp4" ? "video/mp4"
+        : "application/octet-stream";
+    res.setHeader("Content-Type", mime);
+    require("fs").createReadStream(filePath).pipe(res);
+});
+
+/** Vérifie qu'un buffer ressemble à un fichier audio (magic bytes courants). */
+function looksLikeAudio(buffer) {
+    if (!buffer || buffer.length < 16) return false;
+    const head = buffer.subarray(0, 16);
+    if (head[0] === 0x49 && head[1] === 0x44 && head[2] === 0x33) return true;              // ID3 (MP3)
+    if (head[0] === 0xff && (head[1] & 0xe0) === 0xe0) return true;                          // frame MPEG
+    if (head.toString("ascii", 0, 4) === "OggS") return true;                                // OGG
+    if (head.toString("ascii", 0, 4) === "fLaC") return true;                                // FLAC
+    if (head.toString("ascii", 0, 4) === "RIFF") return true;                                // WAV
+    if (head.toString("ascii", 4, 8) === "ftyp") return true;                                // MP4/M4A
+    return false;
+}
+
+/** Stocke un buffer audio et renvoie son URL statique ("/uploads/xxx.mp3"). */
+function persistAudioBuffer(buffer, ext) {
+    const filename = `audio-${Date.now()}${ext || ".mp3"}`;
+    require("fs").writeFileSync(path.join(PUBLIC_UPLOADS_DIR, filename), buffer);
+    console.log(`[PUBLISH] Audio stocké : ${filename}`);
+    return `/uploads/${filename}`;
+}
+
+/**
+ * Télécharge un audio distant et le stocke localement afin qu'il soit
+ * jouable depuis « Published Tracks » (les liens Suno/Udio expirent ou
+ * ne sont pas des MP3 directs). Retourne l'URL locale.
+ */
+async function downloadAudioLocally(audioUrl) {
+    const res = await fetch(audioUrl, { redirect: "follow" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const contentType = res.headers.get("content-type") || "";
+    const buffer = Buffer.from(await res.arrayBuffer());
+    if (!contentType.includes("audio") && !looksLikeAudio(buffer)) {
+        throw new Error(`contenu non audio (${contentType || "type inconnu"}) — le lien n'est pas un fichier MP3 direct`);
+    }
+    const ext = /mpeg|mp3/i.test(contentType) ? ".mp3"
+        : /ogg/i.test(contentType) ? ".ogg"
+        : /wav/i.test(contentType) ? ".wav"
+        : /mp4|m4a/i.test(contentType) ? ".m4a"
+        : ".mp3";
+    console.log(`[PUBLISH] Audio téléchargé (${(buffer.length / 1024 / 1024).toFixed(2)} Mo)`);
+    return persistAudioBuffer(buffer, ext);
+}
+
+/** Copie un fichier MP3 téléversé vers le dossier runtime et renvoie son URL. */
+function persistUploadedAudio(filePath) {
+    const filename = `audio-${Date.now()}${path.extname(filePath) || ".mp3"}`;
+    const dest = path.join(PUBLIC_UPLOADS_DIR, filename);
+    require("fs").copyFileSync(filePath, dest);
+    console.log(`[PUBLISH] Fichier uploadé copié : ${filename}`);
+    return `/uploads/${filename}`;
+}
+
+// Multer : stockage disque en local, mémoire sur Vercel (filesystem en lecture seule)
 const upload = require('multer')({
-    storage: require('multer').diskStorage({
-        destination: (req, file, cb) => cb(null, 'uploads/'),
-        filename: (req, file, cb) => cb(null, `upload-${Date.now()}${require('path').extname(file.originalname)}`)
-    }),
-    limits: { fileSize: 25 * 1024 * 1024 } // 25MB max (Instagram limit)
+    storage: IS_SERVERLESS
+        ? require('multer').memoryStorage()
+        : require('multer').diskStorage({
+            destination: (req, file, cb) => cb(null, UPLOADS_DIR),
+            filename: (req, file, cb) => cb(null, `upload-${Date.now()}${path.extname(file.originalname)}`)
+        }),
+    limits: { fileSize: 25 * 1024 * 1024 }, // 25MB max (Instagram limit)
+    fileFilter: (req, file, cb) => {
+        if (/^audio\//i.test(file.mimetype) || /\.mp3$/i.test(file.originalname)) {
+            cb(null, true);
+        } else {
+            cb(new Error("Format de fichier non supporté : un fichier audio (MP3) est requis."));
+        }
+    }
 });
 
 // --- PUBLISH ENDPOINT ---
 app.post("/api/publish", upload.single('file'), async (req, res) => {
     console.log("[PUBLISH] Starting manual upload/publish process");
-    
+
+    const social = require('./social_publisher.js');
+    const { generateFallbackCover } = require('./cover_fallback.js');
+
     try {
         // Get audio source
-        let audioPath = req.file?.path || req.body?.audioUrl;
-        if (!audioPath) {
+        const audioSource = req.file?.path || req.body?.audioUrl;
+        if (!audioSource) {
             console.error("[PUBLISH] No audio source provided");
-            return res.status(400).json({ error: "Aucune source audio fournie" });
+            return res.status(400).json({ error: "Aucune source audio fournie : renseignez un lien Suno/Udio ou téléversez un fichier MP3." });
         }
-        console.log(`[PUBLISH] Audio source: ${audioPath}`);
+        console.log(`[PUBLISH] Audio source: ${audioSource}`);
 
         // Extract metadata
-        const { stylePrompt, theme, artistUsed = "Artiste" } = req.body;
-        console.log(`[PUBLISH] Metadata - Style: ${stylePrompt?.substring(0, 30)}..., Artist: ${artistUsed}`);
+        const { stylePrompt = "", theme = "", artistUsed = "Artiste Polyvalent" } = req.body;
+        console.log(`[PUBLISH] Metadata - Style: ${stylePrompt.substring(0, 30)}..., Artist: ${artistUsed}`);
 
-        // Generate cover using Hugging Face
-        let coverPath = null;
+        // Rend l'audio disponible localement (public/uploads) pour la lecture
+        // dans « Published Tracks » : les liens Suno/Udio expirent ou ne sont
+        // pas des fichiers MP3 directs jouables par le navigateur.
+        let localAudioUrl = null;
         try {
-            console.log("[PUBLISH] Generating cover with Stable Diffusion (HF API)");
-            const coverResult = await require('./social_publisher.js').generateHFArtwork(
-                stylePrompt || artistUsed,
-                process.env.HF_API_KEY
-            );
-            coverPath = coverResult?.path || coverResult?.url || 'public/default_cover.png';
-            console.log(`[PUBLISH] Cover generated: ${coverPath}`);
-        } catch (coverErr) {
-            console.warn("[PUBLISH] Cover generation failed, using fallback:", coverErr.message);
-            coverPath = 'public/covers/fallback.png';
+            if (req.file?.buffer) {
+                // Stockage mémoire (Vercel)
+                localAudioUrl = persistAudioBuffer(req.file.buffer, path.extname(req.file.originalname) || ".mp3");
+            } else if (req.file?.path) {
+                localAudioUrl = persistUploadedAudio(req.file.path);
+            } else if (req.body?.audioUrl && /^https?:\/\//i.test(req.body.audioUrl)) {
+                localAudioUrl = await downloadAudioLocally(req.body.audioUrl);
+            }
+        } catch (audioErr) {
+            console.warn("[PUBLISH] Audio non téléchargeable localement : " + audioErr.message);
         }
 
-        // Build caption with hashtags
-        const caption = buildCaption({ stylePrompt, artistUsed, theme });
-        console.log(`[PUBLISH] Caption: ${caption.substring(0, 50)}...`);
+        // Generate cover : tente l'API Hugging Face si disponible, sinon pochette de secours locale
+        let coverPath = null;
+        let coverGenerated = false;
+        try {
+            if (typeof social.generateHFArtwork === "function" && process.env.HF_API_KEY) {
+                console.log("[PUBLISH] Generating cover with Stable Diffusion (HF API)");
+                const coverResult = await social.generateHFArtwork(stylePrompt || artistUsed, process.env.HF_API_KEY);
+                coverPath = coverResult?.path || coverResult?.url || null;
+            } else {
+                console.log("[PUBLISH] HF artwork indisponible — génération de la pochette de secours locale");
+            }
+
+            if (!coverPath || !/^https?:\/\//i.test(coverPath)) {
+                if (!coverPath || !require("fs").existsSync(coverPath)) {
+                    coverPath = generateFallbackCover(path.join(__dirname, "public", "covers"));
+                }
+                coverGenerated = true;
+            }
+            console.log(`[PUBLISH] Cover ready: ${coverPath}`);
+        } catch (coverErr) {
+            console.warn("[PUBLISH] Cover generation failed, using fallback:", coverErr.message);
+            try {
+                coverPath = generateFallbackCover(path.join(__dirname, "public", "covers"));
+                coverGenerated = true;
+            } catch (fbErr) {
+                console.error("[PUBLISH] Fallback cover generation failed:", fbErr.message);
+                coverPath = null;
+            }
+        }
+
+        // URL publique de la pochette (fichier sous public/ ou URL distante)
+        const publicCoverUrl = coverPath
+            ? (/^https?:\/\//i.test(coverPath)
+                ? coverPath
+                : "/" + path.relative(path.join(__dirname, "public"), coverPath).split(path.sep).join("/"))
+            : null;
+
+        console.log(`[PUBLISH] Caption: ${social.buildCaption({ stylePrompt, artistUsed }).substring(0, 50)}...`);
+
+        // --- Génération de la vidéo (pochette + audio) pour Facebook/Reels ---
+        // Nécessite un audio LOCAL + une pochette locale.
+        let videoPath = null;
+        if (localAudioUrl && coverPath && !/^https?:\/\//i.test(coverPath)) {
+            try {
+                const { createCoverVideo } = require("./video_maker.js");
+                const audioFile = path.join(PUBLIC_UPLOADS_DIR, path.basename(localAudioUrl));
+                const result = await createCoverVideo({
+                    imagePath: coverPath,
+                    audioPath: audioFile,
+                    outPath: path.join(PUBLIC_UPLOADS_DIR, `video-${Date.now()}.mp4`)
+                });
+                videoPath = result.path;
+            } catch (vidErr) {
+                console.warn("⚠️ [PUBLISH] Génération vidéo impossible — repli photo : " + vidErr.message);
+            }
+        }
 
         // Publish to social platforms
-        const publishResult = await require('./social_publisher.js').publishToAllSocial({
-            audioUrl: audioPath,
+        const publishResult = await social.publishToAllSocial({
+            artistUsed,
+            generatedTheme: theme,
+            stylePrompt,
+            music: { audioUrl: req.body?.audioUrl || "" },
             coverPath,
-            caption
+            videoPath
         });
 
-        console.log("[PUBLISH] Publication completed");
+        const fbOk = !!publishResult.facebook;
+        const igOk = !!publishResult.instagram;
+
+        if (!fbOk && !igOk) {
+            console.error("[PUBLISH] Publication failed on every platform",
+                JSON.stringify({ facebookError: publishResult.facebookError, instagramError: publishResult.instagramError }));
+            return res.status(502).json({
+                error: "La publication a échoué sur toutes les plateformes.",
+                details: {
+                    facebook: publishResult.facebookError || (publishResult.facebook === null ? "Non configurée (token/page manquant dans .env)" : null),
+                    instagram: publishResult.instagramError || (publishResult.instagram === null ? "Non configurée ou image publique indisponible" : null)
+                }
+            });
+        }
+
+        console.log(`[PUBLISH] Publication completed — Facebook: ${fbOk ? "OK" : "KO"}, Instagram: ${igOk ? "OK" : "KO"}`);
         res.json({
             status: "SUCCESS",
-            facebook: publishResult.facebook ? {
+            facebook: fbOk ? {
                 id: publishResult.facebook.postId,
                 url: `https://facebook.com/${publishResult.facebook.postId}`
             } : null,
-            instagram: publishResult.instagram ? {
+            instagram: igOk ? {
                 id: publishResult.instagram.postId,
                 url: `https://instagram.com/p/${publishResult.instagram.postId}`
             } : null,
-            coverGenerated: !!coverPath
+            details: {
+                facebook: publishResult.facebookError || null,
+                instagram: publishResult.instagramError || null
+            },
+            coverGenerated,
+            coverUrl: publicCoverUrl,
+            audioUrl: localAudioUrl,
+            videoGenerated: !!videoPath
         });
 
     } catch (err) {
@@ -532,11 +715,19 @@ app.post("/api/publish", upload.single('file'), async (req, res) => {
 });
 
 // --- Démarrage ---
-app.listen(PORT, () => {
-    console.log("==============================================");
-    console.log("  Music Hit Maker Studio");
-    console.log(`  Serveur démarré : http://localhost:${PORT}`);
-    console.log(`  Modèle Groq     : ${GROQ_MODEL}`);
-    console.log(`  Artistes BDD    : ${ARTISTS_DATABASE.length}`);
-    console.log("==============================================");
-});
+// En local : le serveur écoute sur PORT.
+// Sur Vercel : process.env.VERCEL est défini, on exporte simplement l'app
+// (elle est consommée par api/index.js en tant que fonction serverless).
+if (!process.env.VERCEL) {
+    app.listen(PORT, () => {
+        console.log("==============================================");
+        console.log("  Music Hit Maker Studio");
+        console.log(`  Serveur démarré : http://localhost:${PORT}`);
+        console.log(`  Modèle Groq     : ${GROQ_MODEL}`);
+        console.log(`  Artistes BDD    : ${ARTISTS_DATABASE.length}`);
+        console.log("==============================================");
+    });
+}
+
+// Export pour le déploiement serverless (Vercel)
+module.exports = app;

@@ -343,8 +343,66 @@
     </div>
     -->
 
+    <!-- ==================== MODALE UPLOAD & PUBLIER ==================== -->
+    <div id="modal-publish" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+        <div class="w-full max-w-lg rounded-2xl bg-[#1c1836] border border-orange-700/60 shadow-2xl p-6 animate-fadeIn">
+            <div class="flex items-start justify-between mb-5">
+                <h3 class="text-lg font-bold"><i class="fa-solid fa-upload text-orange-400 mr-2"></i>Publier une chanson</h3>
+                <button id="btn-publish-close" class="text-gray-400 hover:text-white transition"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+
+            <!-- Sélecteur de source -->
+            <p class="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-2">Source audio</p>
+            <div class="grid grid-cols-2 gap-2 mb-4">
+                <button id="publish-mode-link" type="button"
+                    class="px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400">
+                    <i class="fa-solid fa-link mr-1"></i>Lien Suno / Udio
+                </button>
+                <button id="publish-mode-file" type="button"
+                    class="px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400">
+                    <i class="fa-solid fa-file-audio mr-1"></i>Fichier MP3
+                </button>
+            </div>
+
+            <!-- Section : lien Suno / Udio -->
+            <div id="publish-link-section">
+                <label for="publish-link-input" class="block text-sm font-medium text-slate-300 mb-1">URL de la chanson Suno ou Udio</label>
+                <input id="publish-link-input" type="url" spellcheck="false"
+                    placeholder="https://suno.com/song/… ou https://www.udio.com/songs/…"
+                    class="w-full rounded-lg bg-night border border-purple-800/70 p-3 text-sm outline-none transition-colors duration-200 placeholder:text-slate-500 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/30">
+                <p class="text-xs text-slate-500 mt-1.5"><i class="fa-solid fa-circle-info mr-1"></i>Le lien sera inclus dans la légende du post (« Écoutez la chanson complète »).</p>
+            </div>
+
+            <!-- Section : fichier MP3 -->
+            <div id="publish-file-section" class="hidden">
+                <label for="publish-file-input"
+                    class="flex flex-col items-center justify-center gap-2 w-full rounded-xl border-2 border-dashed border-purple-700/70 hover:border-orange-500/80 bg-night/60 hover:bg-orange-500/5 cursor-pointer transition-colors duration-200 px-4 py-8 text-center">
+                    <i class="fa-solid fa-cloud-arrow-up text-3xl text-orange-400"></i>
+                    <span class="text-sm font-semibold text-slate-200">Cliquez pour choisir un fichier MP3</span>
+                    <span class="text-xs text-slate-500">ou glissez-déposez · 25 Mo maximum</span>
+                    <span id="publish-file-name" class="hidden mt-1 max-w-full truncate text-xs font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-600/40 rounded-md px-2 py-1"></span>
+                </label>
+                <input id="publish-file-input" type="file" accept=".mp3,audio/mpeg,audio/*" class="hidden">
+            </div>
+
+            <!-- Zone de statut / résultat -->
+            <div id="publish-status" class="hidden mt-4 rounded-xl border p-4 text-sm"></div>
+
+            <!-- Pied de modale : bouton Publier -->
+            <div class="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-purple-900/60">
+                <button id="btn-publish-cancel" class="px-4 py-2.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 text-sm font-semibold transition active:scale-95">
+                    Annuler
+                </button>
+                <button id="btn-publish-confirm"
+                    class="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-white bg-gradient-to-r from-amber-600 via-orange-600 to-red-600 hover:from-amber-500 hover:via-orange-500 hover:to-red-500 transition shadow-lg shadow-orange-600/25 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:from-amber-600 disabled:hover:via-orange-600 disabled:hover:to-red-600">
+                    <i class="fa-solid fa-paper-plane mr-1"></i>Publier
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast notifications -->
-    <div id="toast-container" class="fixed bottom-5 right-5 z-50 space-y-2"></div>
+    <div id="toast-container" class="fixed bottom-5 right-5 z-[60] space-y-2"></div>
 
     <footer class="text-center text-xs text-slate-500 py-8">
         Music Hit Maker Studio — Propulsé par Groq · Optimisé pour Suno & Udio

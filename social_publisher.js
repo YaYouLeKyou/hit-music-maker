@@ -254,42 +254,268 @@ async function publishInstagram(hit, imageUrl, caption) {
 }
 
 // ============================================================
+// VIDÉOS : Page Facebook + Reels Instagram
+// ============================================================
+
+/**
+ * Publie une vidéo sur la Page Facebook.
+ * - Fichier local : upload multipart vers /{page-id}/videos
+ * - URL http(s)   : paramètre file_url
+ * Retourne { postId, videoId, sourceUrl|null }.
+ */
+async function publishFacebookVideo(hit, videoSource, caption) {
+    if (!FB_PAGE_ID || !FB_PAGE_ACCESS_TOKEN) {
+        console.warn("⚠️ [SOCIAL] Facebook non configuré — publication vidéo ignorée.");
+        return null;
+    }
+
+    let data;
+    if (/^https?:\/\//i.test(videoSource)) {
+        data = await graphPostForm(`${FB_PAGE_ID}/videos`, {
+            file_url: videoSource,
+            description: caption,
+            access_token: FB_PAGE_ACCESS_TOKEN
+        });
+    } else {
+        if (!fs.existsSync(videoSource)) throw new Error("Fichier vidéo introuvable : " + videoSource);
+        const form = new FormData();
+        form.append("access_token", FB_PAGE_ACCESS_TOKEN);
+        form.append("description", caption);
+        form.append("file", new Blob([fs.readFileSync(videoSource)]), path.basename(videoSource));
+        const res = await fetch(`${GRAPH_BASE}/${FB_PAGE_ID}/videos`, { method: "POST", body: form });
+        data = await res.json().catch(() => null);
+        if (!res.ok || !data || data.error) {
+            throw new Error(`Upload vidéo Facebook : ${data?.error?.message || "HTTP " + res.status}`);
+        }
+    }
+
+    const videoId = data.id;
+    const postId = data.post_id || videoId;
+    console.log(`✅ [SOCIAL] Vidéo Facebook publiée : https://facebook.com/${postId}`);
+
+    // Récupère l'URL publique du MP4 (CDN Meta) pour le Reel Instagram
+    let sourceUrl = null;
+    try {
+        const info = await graphGet(videoId, { fields: "source", access_token: FB_PAGE_ACCESS_TOKEN });
+        if (info.source) sourceUrl = info.source;
+    } catch (e) {
+        console.warn("⚠️ [SOCIAL] URL source vidéo FB non récupérée : " + e.message);
+    }
+
+    return { postId, videoId, sourceUrl };
+}
+
+/**
+ * Publie un Reel Instagram à partir d'une URL de vidéo publique (MP4).
+ * Container media_type=REELS puis publication après traitement.
+ */
+async function publishInstagramReel(hit, videoUrl, caption) {
+    if (!IG_USER_ID || !IG_ACCESS_TOKEN) {
+        console.warn("⚠️ [SOCIAL] Instagram non configuré — Reel ignoré.");
+        return null;
+    }
+    if (!videoUrl) {
+        console.warn("⚠️ [SOCIAL] Pas d'URL vidéo publique — Reel impossible.");
+        return null;
+    }
+
+    console.log("📸 [SOCIAL] Publication Reel Instagram en cours…");
+
+    const container = await graphPostForm(`${IG_USER_ID}/media`, {
+        media_type: "REELS",
+        video_url: videoUrl,
+        caption,
+        share_to_feed: "true",
+        access_token: IG_ACCESS_TOKEN
+    });
+    const creationId = container.id;
+    console.log(`📦 [SOCIAL] Container Reel créé : ${creationId}`);
+
+    // Le traitement des vidéos est plus long que les images : jusqu'à ~5 min
+    let statusCode = "IN_PROGRESS";
+    for (let i = 0; i < 60; i++) {
+        await sleep(5000);
+        const status = await graphGet(creationId, {
+            fields: "status_code,status",
+            access_token: IG_ACCESS_TOKEN
+        });
+        statusCode = status.status_code || "IN_PROGRESS";
+        if (statusCode === "FINISHED") break;
+        if (statusCode === "ERROR" || statusCode === "EXPIRED") {
+            throw new Error(`Container Reel en échec (${statusCode}) : ${status.status || "?"}`);
+        }
+    }
+    if (statusCode !== "FINISHED") {
+        throw new Error("Timeout : le container Reel n'a pas fini d'être traité.");
+    }
+
+    const published = await graphPostForm(`${IG_USER_ID}/media_publish`, {
+        creation_id: creationId,
+        access_token: IG_ACCESS_TOKEN
+    });
+
+    console.log(`✅ [SOCIAL] Reel Instagram publié : https://instagram.com/p/${published.id}`);
+    return { postId: published.id };
+}
+
+// ============================================================
 // Orchestration : publie sur les deux plateformes
 // ============================================================
 
 /**
  * Publie le hit du jour sur Facebook puis Instagram.
- * - La photo est d'abord envoyée sur Facebook afin d'obtenir une URL
- *   publique exploitable par l'API Instagram.
+ * - Si une vidéo est disponible (hit.videoPath local ou hit.videoUrl http),
+ *   publie une VIDÉO sur Facebook + un REEL Instagram (audio jouable).
+ *   En cas d'échec vidéo, repli automatique sur le flux photo/texte.
  * - Chaque plateforme échoue indépendamment (non bloquant).
  * Retourne { facebook: {...}|null, instagram: {...}|null }.
  */
 async function publishToAllSocial(hit) {
     const caption = buildCaption(hit);
     const results = { facebook: null, instagram: null };
+    const hasVideo = !!(hit.videoPath || hit.videoUrl);
 
-    // --- Facebook ---
-    try {
-        results.facebook = await publishFacebook(hit, caption);
-    } catch (err) {
-        console.error("❌ [SOCIAL] Échec publication Facebook :", err.message);
+    if (hasVideo) {
+        console.log("🎬 [SOCIAL] Vidéo disponible — publication en mode vidéo/Reel.");
+
+        // --- Facebook : vidéo ---
+        try {
+            results.facebook = await publishFacebookVideo(hit, hit.videoPath || hit.videoUrl, caption);
+        } catch (err) {
+            console.error("❌ [SOCIAL] Échec publication vidéo Facebook : " + err.message);
+        }
+
+        // --- Instagram : Reel (URL vidéo publique : CDN Meta ou URL fournie) ---
+        try {
+            const reelUrl = (results.facebook && results.facebook.sourceUrl) || hit.videoUrl || null;
+            results.instagram = await publishInstagramReel(hit, reelUrl, caption);
+        } catch (err) {
+            results.instagramError = err.message;
+            console.error("❌ [SOCIAL] Échec publication Reel Instagram : " + err.message);
+        }
+
+        // Les deux ont réussi -> terminé
+        if (results.facebook && results.instagram) return results;
+
+        // Sinon on retente ce qui a échoué via le flux photo ci-dessous
+        console.log("↩️ [SOCIAL] Repli sur le flux photo pour la/les plateforme(s) en échec…");
     }
 
-    // --- Instagram ---
-    try {
-        const igImageUrl = (results.facebook && results.facebook.imageUrl) ||
-            (hit.coverPath && /^https?:\/\//i.test(hit.coverPath) ? hit.coverPath : null);
-        results.instagram = await publishInstagram(hit, igImageUrl, caption);
-    } catch (err) {
-        console.error("❌ [SOCIAL] Échec publication Instagram :", err.message);
+    // --- Flux photo/texte (fallback) ---
+    if (!results.facebook) {
+        try {
+            results.facebook = await publishFacebook(hit, caption);
+        } catch (err) {
+            results.facebookError = err.message;
+            console.error("❌ [SOCIAL] Échec publication Facebook :", err.message);
+        }
+    }
+
+    if (!results.instagram) {
+        try {
+            const igImageUrl = (results.facebook && results.facebook.imageUrl) ||
+                (hit.coverPath && /^https?:\/\//i.test(hit.coverPath) ? hit.coverPath : null);
+            results.instagram = await publishInstagram(hit, igImageUrl, caption);
+        } catch (err) {
+            results.instagramError = err.message;
+            console.error("❌ [SOCIAL] Échec publication Instagram :", err.message);
+        }
     }
 
     return results;
 }
 
+// ============================================================
+// POCHETTE DE SECOURS : Hugging Face (Stable Diffusion / FLUX)
+// ============================================================
+
+const HF_DEFAULT_MODEL = process.env.HF_IMAGE_MODEL || "stabilityai/stable-diffusion-3-medium-diffusers";
+
+/** Construit les URLs d'inférence HF (routeur récent puis endpoint historique). */
+function hfText2ImageEndpoints(model) {
+    return [
+        `https://router.huggingface.co/hf-inference/models/${model}`,
+        `https://api-inference.huggingface.co/models/${model}`
+    ];
+}
+
+async function hfRequest(url, apiKey, prompt) {
+    return fetch(url, {
+        method: "POST",
+        headers: {
+            "Authorization": "Bearer " + apiKey,
+            "Content-Type": "application/json",
+            "Accept": "image/png"
+        },
+        body: JSON.stringify({ inputs: prompt })
+    });
+}
+
+/**
+ * Génère une pochette d'album via l'API d'inférence Hugging Face
+ * (Stable Diffusion XL par défaut). Sauvegarde l'image localement
+ * dans public/covers/ et retourne { path }.
+ * Lève une exception si tous les modèles/endpoints échouent.
+ */
+async function generateHFArtwork(prompt, apiKey, model = HF_DEFAULT_MODEL) {
+    if (!apiKey) throw new Error("Clé Hugging Face manquante (HF_API_KEY dans .env).");
+
+    const fullPrompt =
+        "album cover art for a song, " + prompt +
+        ", vibrant colors, cinematic lighting, highly detailed digital art, square composition, no text";
+
+    let lastError = null;
+
+    for (const url of hfText2ImageEndpoints(model)) {
+        try {
+            console.log("🎨 [HF] Génération pochette via " + model);
+            let res = await hfRequest(url, apiKey, fullPrompt);
+
+            // Modèle encore en cours de chargement côté HF -> on patiente et retente une fois
+            if (res.status === 503) {
+                const info = await res.json().catch(() => ({}));
+                const waitSec = Math.min(Math.ceil(info.estimated_time || 20), 45);
+                console.log(`⏳ [HF] Modèle en chargement, nouvelle tentative dans ${waitSec}s…`);
+                await sleep(waitSec * 1000);
+                res = await hfRequest(url, apiKey, fullPrompt);
+            }
+
+            if (!res.ok) {
+                lastError = new Error(`${model} : HTTP ${res.status}`);
+                console.warn("⚠️ [HF] Endpoint KO (" + url + ") : " + lastError.message);
+                continue;
+            }
+
+            const contentType = res.headers.get("content-type") || "";
+            const buffer = Buffer.from(await res.arrayBuffer());
+            if (!contentType.startsWith("image/") || buffer.length < 1000) {
+                lastError = new Error(`${model} : réponse non-image (${contentType || "type inconnu"})`);
+                console.warn("⚠️ [HF] " + lastError.message);
+                continue;
+            }
+
+            const outDir = path.join(__dirname, "public", "covers");
+            if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+            const ext = contentType.includes("jpeg") ? ".jpg" : ".png";
+            const filePath = path.join(outDir, `cover_hf_${Date.now()}${ext}`);
+            fs.writeFileSync(filePath, buffer);
+            console.log(`✅ [HF] Pochette générée : ${filePath} (${(buffer.length / 1024).toFixed(0)} Ko)`);
+            return { path: filePath };
+        } catch (err) {
+            lastError = err;
+            console.warn("⚠️ [HF] Erreur endpoint : " + err.message);
+        }
+    }
+
+    throw lastError || new Error("Génération Hugging Face impossible.");
+}
+
 module.exports = {
     buildCaption,
+    generateHFArtwork,
     publishFacebook,
+    publishFacebookVideo,
     publishInstagram,
+    publishInstagramReel,
     publishToAllSocial
 };

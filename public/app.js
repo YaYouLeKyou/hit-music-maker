@@ -648,16 +648,16 @@ async function publishToSocialMedia(audioUrl) {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Échec de la publication");
 
-        const results = data.results || {};
-        const facebook = results.facebook ? "✅ Facebook" : "⚠️ Facebook";
-        const instagram = results.instagram ? "✅ Instagram" : "⚠️ Instagram";
+        const facebook = data.facebook ? "✅ Facebook" : "⚠️ Facebook";
+        const instagram = data.instagram ? "✅ Instagram" : "⚠️ Instagram";
         toast(`Publication : ${facebook} | ${instagram}`, "success");
 
         // Sauvegarder le track publié dans localStorage pour la page "Tracks Publiés"
+        // audioUrl/coverUrl : versions locales servies par le serveur (lecture fiable)
         savePublishedTrack({
             title: payload.generatedTheme || "Track publié",
-            audioUrl: audioUrl,
-            coverUrl: data.coverGenerated ? "/covers/fallback.png" : "/public/default_cover.png",
+            audioUrl: data.audioUrl || audioUrl,
+            coverUrl: data.coverUrl || "/covers/cover_of_the_day.png",
             stylePrompt: payload.stylePrompt,
             artistUsed: payload.artistUsed,
             blocks: payload.blocks
@@ -691,61 +691,246 @@ function extractArtistFromStyle(style) {
     return match ? match[1].trim() : "Artiste Polyvalent";
 }
 
-/**
- * Gère le téléchargement manuel d'un fichier audio et sa publication
- * automatique sur Facebook & Instagram via l'API serveur.
- */
-async function uploadAndPublish() {
-    const fileInput = document.createElement("input");
-    fileInput.type = "file";
-    fileInput.accept = "audio/*";
-    fileInput.style.display = "none";
+// ============================================================
+// Modale « Upload & Publier »
+// Permet de publier une chanson sur Facebook & Instagram soit via
+// un lien Suno/Udio, soit via un fichier MP3 téléversé.
+// ============================================================
 
-    fileInput.addEventListener("change", async (e) => {
-        const file = e.target.files[0];
-        if (!file) {
-            document.body.removeChild(fileInput);
+const PUBLISH_MODE = { LINK: "link", FILE: "file" };
+let currentPublishMode = PUBLISH_MODE.LINK;
+let isPublishing = false;
+
+/** Ouvre la fenêtre de publication */
+function openPublishModal() {
+    console.log("[Upload & Publier] Ouverture de la fenêtre de publication");
+    $("modal-publish").classList.remove("hidden");
+    document.body.style.overflow = "hidden";
+    setPublishMode(currentPublishMode);
+    setPublishStatus(null);
+}
+
+/** Ferme la fenêtre (bloquée pendant une publication) */
+function closePublishModal() {
+    if (isPublishing) {
+        toast("Publication en cours, veuillez patienter…", "warning");
+        return;
+    }
+    console.log("[Upload & Publier] Fermeture de la fenêtre");
+    $("modal-publish").classList.add("hidden");
+    document.body.style.overflow = "";
+    resetPublishForm();
+}
+
+/** Réinitialise le formulaire de la modale */
+function resetPublishForm() {
+    $("publish-link-input").value = "";
+    $("publish-file-input").value = "";
+    $("publish-file-name").classList.add("hidden");
+    setPublishMode(PUBLISH_MODE.LINK);
+    setPublishStatus(null);
+    setPublishButtonState(false);
+}
+
+/** Bascule entre le mode « lien » et le mode « fichier MP3 » */
+function setPublishMode(mode) {
+    currentPublishMode = mode;
+    const isLink = mode === PUBLISH_MODE.LINK;
+
+    $("publish-link-section").classList.toggle("hidden", !isLink);
+    $("publish-file-section").classList.toggle("hidden", isLink);
+
+    const activeCls = "px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 bg-gradient-to-r from-orange-600 to-red-600 text-white shadow-md shadow-orange-600/25";
+    const idleCls = "px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/70 bg-white/5 text-slate-300 hover:bg-white/10";
+
+    $("publish-mode-link").className = isLink ? activeCls : idleCls;
+    $("publish-mode-file").className = isLink ? idleCls : activeCls;
+}
+
+/** Active/désactive le bouton Publier (+ spinner pendant l'envoi) */
+function setPublishButtonState(publishing) {
+    const btn = $("btn-publish-confirm");
+    btn.disabled = publishing;
+    btn.innerHTML = publishing
+        ? '<i class="fa-solid fa-spinner fa-spin mr-1"></i>Publication…'
+        : '<i class="fa-solid fa-paper-plane mr-1"></i>Publier';
+}
+
+/**
+ * Affiche la zone de statut dans la modale.
+ * @param {null|{type:"info"|"success"|"warning"|"error", html:string}} status
+ */
+function setPublishStatus(status) {
+    const box = $("publish-status");
+    if (!status) {
+        box.classList.add("hidden");
+        box.innerHTML = "";
+        return;
+    }
+    const styles = {
+        info: "border-fuchsia-600/50 bg-fuchsia-500/10 text-purple-200",
+        success: "border-emerald-500/60 bg-emerald-500/10 text-emerald-200",
+        warning: "border-amber-500/60 bg-amber-500/10 text-amber-100",
+        error: "border-red-500/60 bg-red-500/10 text-red-200"
+    };
+    const icons = {
+        info: "fa-compact-disc fa-spin",
+        success: "fa-circle-check",
+        warning: "fa-triangle-exclamation",
+        error: "fa-circle-xmark"
+    };
+    box.className = "mt-4 rounded-xl border p-4 text-sm animate-fadeIn " + styles[status.type];
+    box.innerHTML = `<p><i class="fa-solid ${icons[status.type]} mr-2"></i>${status.html}</p>`;
+}
+
+/** Ajoute les métadonnées communes (style, thème, artiste) au FormData */
+function appendCommonMetadata(formData) {
+    formData.append("stylePrompt", state.stylePrompt.trim());
+    formData.append("theme", $("gen-theme") ? $("gen-theme").value.trim() : "");
+    formData.append("artistUsed", extractArtistFromStyle(state.stylePrompt) || "Artiste Polyvalent");
+}
+
+/** Valide la source choisie et renvoie FormData prêt pour /api/publish */
+function buildPublishPayload() {
+    if (currentPublishMode === PUBLISH_MODE.LINK) {
+        const link = $("publish-link-input").value.trim();
+        if (!link) {
+            return { error: "Veuillez renseigner le lien de votre chanson Suno ou Udio." };
+        }
+        let url;
+        try {
+            url = new URL(link);
+        } catch {
+            return { error: "Lien invalide : il doit commencer par https:// (ex : https://suno.com/song/…)." };
+        }
+        const host = url.hostname.toLowerCase().replace(/^www\./, "");
+        const isSunoOrUdio = /(^|\.)suno\.(com|ai)$/.test(host) || /(^|\.)udio\.com$/.test(host);
+        if (url.protocol !== "https:" || !isSunoOrUdio) {
+            return { error: "Le lien doit pointer vers suno.com, suno.ai ou udio.com." };
+        }
+
+        const fd = new FormData();
+        fd.append("audioUrl", link);
+        appendCommonMetadata(fd);
+        return { formData: fd, label: "Lien : " + link };
+    }
+
+    // Mode fichier MP3
+    const file = $("publish-file-input").files[0];
+    if (!file) {
+        return { error: "Veuillez choisir un fichier MP3 à téléverser." };
+    }
+    if (!/^audio\//i.test(file.type) && !/\.mp3$/i.test(file.name)) {
+        return { error: `« ${file.name} » n'est pas un fichier audio valide.` };
+    }
+    if (file.size > 25 * 1024 * 1024) {
+        return { error: `Fichier trop volumineux (${(file.size / 1024 / 1024).toFixed(1)} Mo). Maximum autorisé : 25 Mo.` };
+    }
+
+    const fd = new FormData();
+    fd.append("file", file);
+    appendCommonMetadata(fd);
+    return { formData: fd, label: `Fichier : ${file.name} (${(file.size / 1024 / 1024).toFixed(1)} Mo)` };
+}
+
+/** Gère le changement de fichier MP3 sélectionné */
+function onPublishFileChange(e) {
+    const file = e.target.files[0];
+    const nameSpan = $("publish-file-name");
+    if (!file) {
+        nameSpan.classList.add("hidden");
+        return;
+    }
+    console.log("[Upload & Publier] Fichier sélectionné :", file.name, `(${(file.size / 1024 / 1024).toFixed(1)} Mo)`);
+    nameSpan.textContent = `${file.name} · ${(file.size / 1024 / 1024).toFixed(1)} Mo`;
+    nameSpan.classList.remove("hidden");
+}
+
+/** Clic sur « Publier » : validation puis envoi au serveur */
+async function performPublish() {
+    if (isPublishing) return;
+
+    const payload = buildPublishPayload();
+    if (payload.error) {
+        console.warn("[Upload & Publier] Validation refusée :", payload.error);
+        setPublishStatus({ type: "warning", html: escapeHtml(payload.error) });
+        toast(payload.error, "warning");
+        return;
+    }
+
+    isPublishing = true;
+    setPublishButtonState(true);
+    console.log("[Upload & Publier] Envoi vers /api/publish —", payload.label);
+
+    try {
+        setPublishStatus({ type: "info", html: "Génération de la pochette & publication sur Facebook et Instagram en cours…" });
+
+        const res = await fetch("/api/publish", { method: "POST", body: payload.formData });
+        let data;
+        try {
+            data = await res.json();
+        } catch {
+            throw new Error(`Réponse serveur illisible (HTTP ${res.status})`);
+        }
+        console.log("[Upload & Publier] Réponse serveur :", res.status, data);
+
+        if (!res.ok) {
+            const detailLines = [];
+            if (data.error) detailLines.push(escapeHtml(data.error));
+            if (data.details) {
+                for (const [platform, msg] of Object.entries(data.details)) {
+                    if (msg) {
+                        detailLines.push(`<span class="font-semibold">${platform === "facebook" ? "📘 Facebook" : "📸 Instagram"} :</span> ${escapeHtml(msg)}`);
+                    }
+                }
+            }
+            const html = detailLines.join("<br>") || `Erreur serveur (HTTP ${res.status})`;
+            console.error("[Upload & Publier] Échec de la publication :", JSON.stringify(data, null, 2));
+            setPublishStatus({ type: "error", html });
+            toast(data.error || "Échec de la publication.", "error");
             return;
         }
 
-        const btn = $("btn-upload-publish");
-        const originalHtml = btn.innerHTML;
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i>Téléchargement…';
+        // --- Succès (au moins une plateforme publiée) ---
+        const fbLine = data.facebook
+            ? `✅ <a href="${escapeHtml(data.facebook.url)}" target="_blank" rel="noopener" class="underline hover:text-emerald-100">Voir sur Facebook</a>`
+            : `⚠️ <span class="opacity-80">Facebook non publié${data.details?.facebook ? " — " + escapeHtml(data.details.facebook) : ""}</span>`;
+        const igLine = data.instagram
+            ? `✅ <a href="${escapeHtml(data.instagram.url)}" target="_blank" rel="noopener" class="underline hover:text-emerald-100">Voir sur Instagram</a>`
+            : `⚠️ <span class="opacity-80">Instagram non publié${data.details?.instagram ? " — " + escapeHtml(data.details.instagram) : ""}</span>`;
 
-        try {
-            const formData = new FormData();
-            formData.append("file", file);
-            formData.append("stylePrompt", state.stylePrompt.trim());
-            formData.append("theme", $("gen-theme") ? $("gen-theme").value.trim() : "");
-            formData.append("artistUsed", extractArtistFromStyle(state.stylePrompt) || "Artiste Polyvalent");
+        const allOk = !!(data.facebook && data.instagram);
+        console.log(`[Upload & Publier] Publication terminée — Facebook: ${data.facebook ? "OK" : "KO"}, Instagram: ${data.instagram ? "OK" : "KO"}`);
 
-            const res = await fetch("/api/publish", {
-                method: "POST",
-                body: formData
-            });
+        setPublishStatus({
+            type: allOk ? "success" : "warning",
+            html: `<span class="font-bold">${allOk ? "Chanson publiée avec succès !" : "Publication partielle."}</span><br>` +
+                  `<span class="block mt-1">Facebook : ${fbLine}</span><br><span class="block">Instagram : ${igLine}</span>`
+        });
+        toast(allOk ? "🎉 Chanson publiée sur Facebook & Instagram !" : "⚠️ Publication partielle — voir la fenêtre.", allOk ? "success" : "warning");
 
-            const data = await res.json();
-
-            if (!res.ok) {
-                throw new Error(data.error || `Erreur serveur (${res.status})`);
-            }
-
-            const facebook = data.facebook ? "✅ Facebook" : "⚠️ Facebook";
-            const instagram = data.instagram ? "✅ Instagram" : "⚠️ Instagram";
-            toast(`Publication : ${facebook} | ${instagram}`, "success");
-        } catch (err) {
-            console.error("[uploadAndPublish] Échec :", err);
-            toast("Échec de la publication : " + (err.message || "erreur inconnue"), "error");
-        } finally {
-            btn.disabled = false;
-            btn.innerHTML = originalHtml;
-            document.body.removeChild(fileInput);
-        }
-    });
-
-    document.body.appendChild(fileInput);
-    fileInput.click();
+        // Sauvegarde pour la page « Published Tracks »
+        // audioUrl : version locale téléchargée par le serveur si possible
+        savePublishedTrack({
+            title: ($("gen-theme") ? $("gen-theme").value.trim() : "") || "Track publié",
+            audioUrl: data.audioUrl || (currentPublishMode === PUBLISH_MODE.LINK ? $("publish-link-input").value.trim() : ""),
+            coverUrl: data.coverUrl || "/covers/cover_of_the_day.png",
+            stylePrompt: state.stylePrompt.trim(),
+            artistUsed: extractArtistFromStyle(state.stylePrompt),
+            blocks: state.blocks
+        });
+    } catch (err) {
+        console.error("[Upload & Publier] Erreur réseau/inattendue :", err);
+        setPublishStatus({
+            type: "error",
+            html: `<span class="font-bold">Échec de la publication.</span><br>${escapeHtml(err.message || "Erreur inconnue")}<br>
+                   <span class="text-xs opacity-75">Vérifiez que le serveur est démarré et consultez les logs du terminal.</span>`
+        });
+        toast("Échec de la publication : " + (err.message || "erreur inconnue"), "error");
+    } finally {
+        isPublishing = false;
+        setPublishButtonState(false);
+    }
 }
 
 /** Affiche les pistes générées avec bouton play / pause */
@@ -1101,10 +1286,26 @@ function init() {
     // --- CTA final : Générer ma musique (injection automatique dans Suno) ---
     $("btn-generate-music").addEventListener("click", generateMusicOnSuno);
 
-    // --- Bouton Upload & Publier ---
+    // --- Bouton Upload & Publier (ouvre la modale) ---
     if ($("btn-upload-publish")) {
-        $("btn-upload-publish").addEventListener("click", uploadAndPublish);
+        $("btn-upload-publish").addEventListener("click", openPublishModal);
     }
+
+    // --- Modale Upload & Publier ---
+    $("publish-mode-link").addEventListener("click", () => setPublishMode(PUBLISH_MODE.LINK));
+    $("publish-mode-file").addEventListener("click", () => setPublishMode(PUBLISH_MODE.FILE));
+    $("publish-file-input").addEventListener("change", onPublishFileChange);
+    $("btn-publish-cancel").addEventListener("click", closePublishModal);
+    $("btn-publish-close").addEventListener("click", closePublishModal);
+    $("btn-publish-confirm").addEventListener("click", performPublish);
+    $("modal-publish").addEventListener("click", (e) => {
+        if (e.target === $("modal-publish")) closePublishModal();
+    });
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && !$("modal-publish").classList.contains("hidden")) {
+            closePublishModal();
+        }
+    });
 
     // --- Sauvegarde / nettoyage ---
     $("btn-save-song").addEventListener("click", saveCurrentSong);

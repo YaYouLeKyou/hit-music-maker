@@ -20,6 +20,10 @@
  * Usage :
  *   node cron_daily.js            # exécution unique
  *   node cron_daily.js --dry-run  # sans sauvegarde ni notification
+ *
+ * ⛔ MODE AUTOMATIQUE DÉSACTIVÉ PAR DÉFAUT :
+ *   Les APIs Suno/Udio sont payantes, le pipeline quotidien ne s'exécute
+ *   que si AUTO_ENABLED=true est défini (.env ou secret GitHub).
  */
 
 "use strict";
@@ -605,6 +609,22 @@ async function notifyDiscord(hit) {
 // ============================================================
 // Point d'entrée
 // ============================================================
+
+// ⛔ VERROU DU MODE AUTOMATIQUE — APIs Suno/Udio PAYANTES.
+// Ce pipeline quotidien génère ET publie automatiquement une chanson,
+// ce qui consomme du crédit sur les APIs tierces (Suno/Udio).
+// Il est donc DÉSACTIVÉ par défaut : il ne s'exécute que si
+// AUTO_ENABLED=true est défini dans .env (ou en secret GitHub).
+const AUTO_ENABLED = /^(1|true|oui|yes|on)$/i.test(process.env.AUTO_ENABLED || "");
+if (!AUTO_ENABLED) {
+    console.log("⛔ [CRON] Mode automatique DÉSACTIVÉ (AUTO_ENABLED non défini à true).");
+    console.log("   Les APIs de génération musicale (Suno/Udio) sont payantes : le");
+    console.log("   pipeline quotidien automatique ne s'exécute plus.");
+    console.log("");
+    console.log("   → Génération manuelle : utilisez le Studio (http://localhost:3000).");
+    console.log("   → Réactiver le mode auto : AUTO_ENABLED=true dans .env");
+    process.exit(0);
+}
 
 (async () => {
     try {

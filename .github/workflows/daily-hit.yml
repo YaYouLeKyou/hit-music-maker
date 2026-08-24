@@ -1,9 +1,8 @@
 name: Chanson du Jour (Facebook + Instagram)
 
 on:
-  # Publication automatique tous les jours à 12h00 heure de Paris (10h00 UTC)
-  schedule:
-    - cron: "0 10 * * *"
+  # ⛔ MODE AUTOMATIQUE DÉSACTIVÉ — APIs Suno/Udio payantes.
+  # La planification quotidienne (schedule) a été retirée.
   # Déclenchement manuel possible depuis l'onglet Actions
   workflow_dispatch:
 
