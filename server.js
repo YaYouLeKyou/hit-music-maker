@@ -22,7 +22,7 @@ app.use(cors());
 // Le webhook Stripe exige le corps BRUT pour vérifier la signature :
 // on ne parse pas le JSON sur ce chemin précis.
 app.use((req, res, next) => {
-    if (req.path === "/api/stripe/webhook") return next();
+    if (req.path === "/api/stripe/webhook" || req.path === "/api/blob-upload") return next();
     return express.json({ limit: "1mb" })(req, res, next);
 });
 
@@ -938,6 +938,62 @@ function persistUploadedAudio(filePath) {
     return `/uploads/${filename}`;
 }
 
+// ============================================================
+// PERSISTANCE VERCEL BLOB — stockage permanent des fichiers générés
+// ============================================================
+const blobAvailable = () => !!process.env.BLOB_READ_WRITE_TOKEN;
+
+/**
+ * Copie un buffer vers Vercel Blob (URL publique permanente).
+ * @param {Buffer} buffer
+ * @param {string} prefix dossier Blob (ex: tracks, covers)
+ * @param {string} ext extension (ex: .mp4)
+ */
+async function persistToBlob(buffer, prefix, ext) {
+    const { put } = require("@vercel/blob");
+    const fileUrl = await put(
+        `${prefix}/${Date.now()}-${Math.random().toString(36).slice(2, 9)}${ext}`,
+        buffer,
+        {
+            access: "public",
+            contentType: ext === ".mp3" ? "audio/mpeg"
+                : ext === ".mp4" ? "video/mp4"
+                : ext === ".png" ? "image/png"
+                : "application/octet-stream"
+        }
+    );
+    console.log(`[BLOB] Fichier permanent : ${fileUrl.url}`);
+    return fileUrl.url;
+}
+
+/**
+ * Route POST /api/blob-upload?filename=xxx — pattern serveur (fichier < ~4 Mo).
+ * Le corps brut de la requête EST le fichier (comme l'exemple Vercel).
+ */
+app.post("/api/blob-upload", async (req, res) => {
+    try {
+        if (!blobAvailable()) {
+            return res.status(501).json({ error: "Stockage Blob non configuré." });
+        }
+        const { filename } = req.query || {};
+        if (!filename || !/[\w-]+\.[a-z0-9]{2,5}$/i.test(String(filename))) {
+            return res.status(400).json({ error: "Nom de fichier invalide." });
+        }
+        const { put } = require("@vercel/blob");
+        const chunks = [];
+        for await (const chunk of req) chunks.push(chunk);
+        const bodyBuffer = Buffer.concat(chunks);
+        const blob = await put(`uploads/${filename}`, bodyBuffer, {
+            access: "public",
+            addRandomSuffix: false
+        });
+        res.json({ url: blob.url });
+    } catch (err) {
+        console.error("[BLOB-UPLOAD] Erreur :", err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Multer : stockage disque en local, mémoire sur Vercel (filesystem en lecture seule)
 const upload = require('multer')({
     storage: IS_SERVERLESS
@@ -1051,6 +1107,34 @@ app.post("/api/publish", upload.single('file'), async (req, res) => {
         // par la route dynamique /uploads/:file (/tmp sur Vercel)
         const publicCoverUrl = coverPath ? `/uploads/${path.basename(coverPath)}` : null;
 
+        // --- Persistance Vercel Blob (URLs permanentes) ---
+        // Si Blob est configuré, on copie les fichiers générés dans le stockage
+        // persistant : la pochette, l'audio et la vidéo.
+        let audioUrlFinal = localAudioUrl || null;
+        let coverUrlFinal = publicCoverUrl;
+        let videoUrlFinal = null;
+
+        if (process.env.BLOB_READ_WRITE_TOKEN) {
+            const { put } = require("@vercel/blob");
+            try {
+                if (videoPath && fs.existsSync(videoPath)) {
+                    const v = await put(`videos/${Date.now()}-${path.basename(videoPath)}`, fs.readFileSync(videoPath), { access: "public", addRandomSuffix: false });
+                    videoUrlFinal = v.url;
+                }
+                if (localAudioUrl && fs.existsSync(path.join(PUBLIC_UPLOADS_DIR, path.basename(localAudioUrl)))) {
+                    const a = await put(`audio/${Date.now()}-${path.basename(localAudioUrl)}`, fs.readFileSync(path.join(PUBLIC_UPLOADS_DIR, path.basename(localAudioUrl))), { access: "public", addRandomSuffix: false });
+                    audioUrlFinal = a.url;
+                }
+                if (coverPath && fs.existsSync(coverPath)) {
+                    const c = await put(`covers/${Date.now()}-${path.basename(coverPath)}`, fs.readFileSync(coverPath), { access: "public", addRandomSuffix: false });
+                    coverUrlFinal = c.url;
+                }
+                console.log(`[PUBLISH] Persistance Blob OK — vidéo : ${videoUrlFinal || "—"} | audio : ${audioUrlFinal || "—"} | pochette : ${coverUrlFinal || "—"}`);
+            } catch (blobErr) {
+                console.warn(`[PUBLISH] Persistance Blob impossible : ${blobErr.message}`);
+            }
+        }
+
         console.log(`[PUBLISH] Caption: ${social.buildCaption({ stylePrompt, artistUsed }).substring(0, 50)}...`);
 
         // --- Génération de la vidéo (pochette + audio) pour Facebook/Reels ---
@@ -1115,8 +1199,9 @@ app.post("/api/publish", upload.single('file'), async (req, res) => {
                 instagram: publishResult.instagramError || null
             },
             coverGenerated,
-            coverUrl: publicCoverUrl,
-            audioUrl: persistedAudioUrl || localAudioUrl,
+            coverUrl: coverUrlFinal,
+            audioUrl: audioUrlFinal,
+            videoUrl: videoUrlFinal,
             videoGenerated: !!videoPath,
             instagramPendingCreationId: publishResult.instagramPendingCreationId || null
         });

@@ -813,6 +813,7 @@ async function publishToSocialMedia(audioUrl) {
             title: payload.songTitle || payload.generatedTheme || "Track publié",
             audioUrl: data.audioUrl || audioUrl,
             coverUrl: data.coverUrl || "/covers/cover_of_the_day.png",
+            videoUrl: data.videoUrl || null,
             stylePrompt: payload.stylePrompt,
             artistUsed: payload.artistUsed,
             blocks: payload.blocks
@@ -1295,6 +1296,7 @@ async function performPublish() {
             title: getManualSongTitle() || ($("gen-theme") ? $("gen-theme").value.trim() : "") || "Track publié",
             audioUrl: data.audioUrl || (currentPublishMode === PUBLISH_MODE.LINK ? $("publish-link-input").value.trim() : ""),
             coverUrl: data.coverUrl || "/covers/cover_of_the_day.png",
+            videoUrl: data.videoUrl || null,
             stylePrompt: state.stylePrompt.trim(),
             artistUsed: getSelectedArtistName(),
             blocks: state.blocks

@@ -33,7 +33,7 @@ function getFfmpegPath() {
  */
 function createCoverVideo({ imagePath, audioPath, outPath, duration }) {
     const maxDuration = Math.min(
-        Number(duration || process.env.VIDEO_MAX_DURATION || 60),
+        Number(duration || process.env.VIDEO_MAX_DURATION || 300),
         600
     );
 
@@ -50,14 +50,14 @@ function createCoverVideo({ imagePath, audioPath, outPath, duration }) {
         "-i", audioPath,
         "-t", String(maxDuration),          // borne la durée
         "-vf", [
-            "scale=1080:1080:force_original_aspect_ratio=decrease",
-            "pad=1080:1080:(ow-iw)/2:(oh-ih)/2:color=#12101f",
+            "scale=720:720:force_original_aspect_ratio=decrease",
+            "pad=720:720:(ow-iw)/2:(oh-ih)/2:color=#12101f",
             "format=yuv420p",
-            "fps=15"
+            "fps=12"
         ].join(","),
         "-c:v", "libx264",
-        "-preset", "veryfast",
-        "-crf", "26",
+        "-preset", "ultrafast",             // encodage rapide (limite serverless Vercel)
+        "-crf", "27",
         "-c:a", "aac",
         "-b:a", "128k",
         "-shortest",                        // s'arrête à la fin de l'audio si plus court

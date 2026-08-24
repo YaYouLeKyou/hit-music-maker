@@ -207,9 +207,105 @@
             .btn { width: 100%; }
         }
 
-        /* ============================================================
-           RESPONSIVE / TOUCH — mobiles & tablettes
-           ============================================================ */
+        /* Carte active pendant la lecture */
+        .track-card.playing {
+            border-color: rgba(217, 70, 239, 0.75);
+            box-shadow: 0 0 0 1px rgba(217, 70, 239, 0.4), 0 18px 36px -12px rgba(0, 0, 0, 0.55);
+        }
+
+        /* Bouton play sur chaque carte */
+        .play-btn {
+            flex-shrink: 0;
+            width: 44px;
+            height: 44px;
+            border-radius: 9999px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            background: linear-gradient(135deg, #d946ef, #8b5cf6);
+            box-shadow: 0 4px 12px -4px rgba(217, 70, 239, 0.5);
+            transition: transform 0.15s ease, opacity 0.15s ease;
+        }
+        .play-btn:hover { transform: scale(1.06); }
+        .play-btn.disabled { opacity: 0.4; background: #3f3a5f; cursor: not-allowed; }
+        .play-btn:active { transform: scale(0.94); }
+
+        /* ==================== BARRE LECTEUR STICKY ==================== */
+        .player-bar {
+            position: fixed;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 50;
+            display: none;
+            align-items: center;
+            gap: 1rem;
+            padding: 0.75rem 1rem;
+            background: rgba(28, 24, 54, 0.97);
+            border-top: 1px solid rgba(139, 92, 246, 0.35);
+            box-shadow: 0 -12px 32px -14px rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(8px);
+        }
+        .player-bar.visible { display: flex; }
+
+        .player-info { min-width: 0; flex: 1 1 auto; }
+        .player-title {
+            font-size: 0.875rem;
+            font-weight: 700;
+            color: #f1f5f9;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .player-artist {
+            font-size: 0.75rem;
+            color: #94a3b8;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .player-controls { display: flex; align-items: center; gap: 0.35rem; }
+        .pc-btn {
+            width: 44px;
+            height: 44px;
+            border-radius: 9999px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #e2e8f0;
+            background: rgba(255, 255, 255, 0.06);
+            transition: background 0.15s ease, transform 0.1s ease;
+        }
+        .pc-btn:hover { background: rgba(255, 255, 255, 0.14); }
+        .pc-btn:active { transform: scale(0.9); }
+        .pc-btn-big { background: linear-gradient(135deg, #d946ef, #8b5cf6); color: #fff; }
+        .pc-btn-big:hover { background: linear-gradient(135deg, #e879f9, #a78bfa); }
+
+        .player-progress {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            flex: 0 0 auto;
+            width: min(320px, 30%);
+        }
+        .player-progress input[type="range"] {
+            flex: 1;
+            accent-color: #d946ef;
+            min-width: 80px;
+            cursor: pointer;
+        }
+        .player-time { font-size: 0.75rem; color: #94a3b8; white-space: nowrap; }
+
+        @media (max-width: 640px) {
+            .player-bar { flex-wrap: wrap; gap: 0.6rem; padding: 0.6rem 0.75rem; }
+            .player-progress { width: 100%; order: 4; }
+            .player-controls { order: 3; }
+            .player-info { order: 2; }
+            .track-cover { order: 1; }
+        }
+        body { padding-bottom: 90px; }
         button, a, [role="button"] { -webkit-tap-highlight-color: transparent; }
         body { overflow-x: hidden; }
 
@@ -244,6 +340,25 @@
         </div>
     </div>
 
+    <!-- ==================== LECTEUR GLOBAL (barre sticky) ==================== -->
+    <audio id="global-audio" preload="none"></audio>
+    <div id="player-bar" class="player-bar">
+        <div class="track-cover" id="bar-cover">🎵</div>
+        <div class="player-info">
+            <div class="player-title" id="bar-title">—</div>
+            <div class="player-artist" id="bar-artist"></div>
+        </div>
+        <div class="player-controls">
+            <button id="bar-prev" title="Précédent" class="pc-btn"><i class="fa-solid fa-backward-step"></i></button>
+            <button id="bar-play" title="Lecture / Pause" class="pc-btn pc-btn-big"><i class="fa-solid fa-play" id="bar-play-icon"></i></button>
+            <button id="bar-next" title="Suivant" class="pc-btn"><i class="fa-solid fa-forward-step"></i></button>
+        </div>
+        <div class="player-progress">
+            <input type="range" id="bar-progress" min="0" max="100" value="0" step="0.1" aria-label="Progression">
+            <span class="player-time" id="bar-time">0:00 / 0:00</span>
+        </div>
+    </div>
+
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             const tracksContainer = document.getElementById('tracks-container');
@@ -272,19 +387,21 @@
             }
             
             // Render tracks
-            tracksContainer.innerHTML = publishedTracks.map(track => {
+            // Chaque carte a un bouton play qui pilote le lecteur GLOBAL.
+            tracksContainer.innerHTML = publishedTracks.map((track, index) => {
                 // Handle cover image loading errors
                 const coverImg = track.coverUrl 
                     ? `<img src="${track.coverUrl}" alt="Cover for ${track.title || 'Track'}" onerror="this.onerror=null; this.parentNode.innerHTML='🎵';">`
                     : '🎵';
 
-                const player = (track.audioUrl || track.streamAudioUrl)
-                    ? `<audio class="audio-player" controls preload="metadata" src="${track.audioUrl || track.streamAudioUrl}">Votre navigateur ne supporte pas l'élément audio.</audio>`
-                    : `<p class="audio-missing"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Audio non disponible</p>`;
+                const hasAudio = !!(track.audioUrl || track.streamAudioUrl);
 
                 return `
-                    <div class="track-card" data-track-id="${track.id}">
+                    <div class="track-card" data-track-id="${track.id}" data-index="${index}">
                         <div class="track-main">
+                            <button class="play-btn ${hasAudio ? '' : 'disabled'}" data-action="play" data-index="${index}" title="${hasAudio ? 'Lire cette chanson' : 'Audio non disponible'}">
+                                <i class="fa-solid fa-play"></i>
+                            </button>
                             <div class="track-cover">
                                 ${coverImg}
                             </div>
@@ -293,9 +410,9 @@
                                 ${track.artistUsed ? `<p class="track-artist"><i class="fa-solid fa-microphone-lines mr-1"></i>${track.artistUsed}</p>` : ''}
                             </div>
                         </div>
-                        ${player}
+                        ${!hasAudio ? `<p class="audio-missing"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Audio non disponible</p>` : ''}
                         <div class="btn-group">
-                            ${(track.audioUrl || track.streamAudioUrl) ? 
+                            ${hasAudio ? 
                                 `<a href="${track.audioUrl || track.streamAudioUrl}" download="${(track.title || 'track').replace(/[^a-z0-9]/gi, '_')}.mp3" class="btn btn-download">
                                     <i class="fa-solid fa-download"></i> Télécharger
                                 </a>` : 
@@ -310,8 +427,137 @@
                     </div>
                 `;
             }).join('');
+
+            // --- Lecteur global + auto-enchaînement ---
+            setupPlayer(publishedTracks);
         });
         
+        // ============================================================
+        // LECTEUR GLOBAL — un seul <audio> + barre sticky en bas
+        // ============================================================
+        function setupPlayer(tracks) {
+            const list = tracks.filter(t => !!(t.audioUrl || t.streamAudioUrl));
+            const audioEl = document.getElementById('global-audio');
+            const playIcon = document.getElementById('bar-play-icon');
+            const prevBtn = document.getElementById('bar-prev');
+            const nextBtn = document.getElementById('bar-next');
+            const prog = document.getElementById('bar-progress');
+            const timeEl = document.getElementById('bar-time');
+            const titleEl = document.getElementById('bar-title');
+            const artistEl = document.getElementById('bar-artist');
+            const coverEl = document.getElementById('bar-cover');
+            const bar = document.getElementById('player-bar');
+
+            let current = -1; // index dans `list`
+
+            // Index d'affichage (pour retrouver la carte active)
+            const displayIndexOf = (listIndex) => {
+                const track = list[listIndex];
+                if (!track) return -1;
+                const card = document.querySelector(`.track-card[data-track-id="${track.id}"]`);
+                return card ? parseInt(card.dataset.index, 10) : -1;
+            };
+
+            function updateBar() {
+                if (current < 0 || !list[current]) return;
+                const track = list[current];
+                titleEl.textContent = track.title || 'Sans titre';
+                artistEl.textContent = track.artistUsed || '';
+                coverEl.innerHTML = track.coverUrl
+                    ? `<img src="${track.coverUrl}" alt="" onerror="this.onerror=null; this.parentNode.innerHTML='🎵';">`
+                    : '🎵';
+                bar.classList.add('visible');
+                updateActiveCard();
+            }
+
+            function updateActiveCard() {
+                document.querySelectorAll('.track-card').forEach(c => c.classList.remove('playing'));
+                const idx = displayIndexOf(current);
+                if (idx >= 0) {
+                    document.querySelector(`.track-card[data-index="${idx}"]`)?.classList.add('playing');
+                }
+                document.querySelectorAll('.play-btn[data-index]').forEach(b => {
+                    b.innerHTML = (parseInt(b.dataset.index, 10) === idx && !audioEl.paused)
+                        ? '<i class="fa-solid fa-pause"></i>'
+                        : '<i class="fa-solid fa-play"></i>';
+                });
+            }
+
+            function loadAndPlay(listIndex, start) {
+                if (listIndex < 0 || listIndex >= list.length) return;
+                current = listIndex;
+                audioEl.src = list[listIndex].audioUrl || list[listIndex].streamAudioUrl;
+                audioEl.currentTime = 0;
+                if (start) audioEl.play().catch(() => {});
+                updateBar();
+            }
+
+            function playPause() {
+                if (current < 0) { loadAndPlay(0, true); return; }
+                if (audioEl.paused) audioEl.play().catch(() => {}); else audioEl.pause();
+            }
+
+            function next(autoStart) {
+                const n = list.length ? (current + 1) % list.length : 0;
+                loadAndPlay(n, autoStart === undefined ? true : autoStart);
+            }
+
+            function prev() {
+                if (audioEl.currentTime > 3) { audioEl.currentTime = 0; return; }
+                const p = current <= 0 ? list.length - 1 : current - 1;
+                loadAndPlay(p, true);
+            }
+
+            // Clic sur les boutons play des cartes
+            document.querySelectorAll('.play-btn[data-index]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    if (btn.classList.contains('disabled')) return;
+                    const idx = parseInt(btn.dataset.index, 10);
+                    const track = tracks[idx];
+                    const listIndex = list.findIndex(t => t.id === track.id);
+                    if (current === listIndex && !audioEl.paused) {
+                        audioEl.pause();
+                    } else {
+                        loadAndPlay(listIndex, true);
+                    }
+                });
+            });
+
+            // Contrôles de la barre
+            document.getElementById('bar-play').addEventListener('click', playPause);
+            prevBtn.addEventListener('click', prev);
+            nextBtn.addEventListener('click', () => next(true));
+
+            // Barre de progression
+            audioEl.addEventListener('timeupdate', () => {
+                if (!audioEl.duration) return;
+                prog.value = (audioEl.currentTime / audioEl.duration) * 100;
+                const mm = Math.floor(audioEl.currentTime / 60);
+                const ss = String(Math.floor(audioEl.currentTime % 60)).padStart(2, '0');
+                const tm = Math.floor(audioEl.duration / 60);
+                const ts = String(Math.floor(audioEl.duration % 60)).padStart(2, '0');
+                timeEl.textContent = `${mm}:${ss} / ${tm}:${ts}`;
+            });
+            prog.addEventListener('input', () => {
+                if (!audioEl.duration) return;
+                audioEl.currentTime = (prog.value / 100) * audioEl.duration;
+            });
+
+            // États play/pause (icône globale + carte active)
+            audioEl.addEventListener('play', () => { playIcon.className = 'fa-solid fa-pause'; updateActiveCard(); });
+            audioEl.addEventListener('pause', () => { playIcon.className = 'fa-solid fa-play'; updateActiveCard(); });
+
+            // AUTO-ENCHAÎNEMENT : fin d'une piste -> la suivante démarre
+            audioEl.addEventListener('ended', () => { next(true); });
+
+            // Libération sur déchargement
+            window.addEventListener('beforeunload', () => {
+                audioEl.pause();
+                audioEl.removeAttribute('src');
+                audioEl.load();
+            });
+        }
+
         function deleteTrack(trackId) {
             if (!confirm("Êtes-vous sûr de vouloir supprimer ce track publié ? Cette action est irréversible.")) {
                 return;
