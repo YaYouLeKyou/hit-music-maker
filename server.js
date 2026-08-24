@@ -459,25 +459,34 @@ function extractJson(text) {
     return JSON.parse(cleaned.slice(start, end + 1));
 }
 
+// --- Détection serverless (Vercel) ---
+// Doit être défini AVANT toute écriture disque : le filesystem est en
+// lecture seule sur Vercel, seul /tmp est accessible en écriture.
+const IS_SERVERLESS = !!process.env.VERCEL;
+
+/** Crée un dossier uniquement si nécessaire, sans jamais planter au boot. */
+function ensureDir(dir) {
+    if (!dir || require("fs").existsSync(dir)) return;
+    try {
+        require("fs").mkdirSync(dir, { recursive: true });
+    } catch (err) {
+        console.warn(`[BOOT] Impossible de créer ${dir} : ${err.message}`);
+    }
+}
+
 // --- Multer configuration for file uploads ---
 // Le dossier de destination doit exister sinon Multer échoue.
+// (local uniquement : sur Vercel on utilise le stockage mémoire)
 const UPLOADS_DIR = path.join(__dirname, "uploads");
-if (!require("fs").existsSync(UPLOADS_DIR)) {
-    require("fs").mkdirSync(UPLOADS_DIR, { recursive: true });
-    console.log("[PUBLISH] Dossier uploads/ créé.");
-}
+if (!IS_SERVERLESS) ensureDir(UPLOADS_DIR);
 
 // --- Dossier d'écriture pour les fichiers générés à l'exécution ---
 // En local : public/uploads (servi par express.static).
-// Sur Vercel (serverless) : filesystem en lecture seule sauf /tmp,
-// donc on écrit dans /tmp et une route dynamique /uploads/:file sert les fichiers.
-const IS_SERVERLESS = !!process.env.VERCEL;
+// Sur Vercel (serverless) : /tmp + route dynamique /uploads/:file.
 const PUBLIC_UPLOADS_DIR = IS_SERVERLESS
     ? require("os").tmpdir()
     : path.join(__dirname, "public", "uploads");
-if (!require("fs").existsSync(PUBLIC_UPLOADS_DIR)) {
-    require("fs").mkdirSync(PUBLIC_UPLOADS_DIR, { recursive: true });
-}
+ensureDir(PUBLIC_UPLOADS_DIR);
 
 // Route de secours : sert les fichiers générés à l'exécution quand
 // express.static ne les trouve pas (cas Vercel / dossier temporaire).
