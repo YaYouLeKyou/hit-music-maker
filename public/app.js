@@ -202,13 +202,13 @@ function renderBlocks() {
                     </select>
                 </div>
                 <div class="flex items-center gap-1">
-                    <button data-action="up" title="Monter" class="w-8 h-8 rounded-md bg-purple-900/50 hover:bg-purple-700 transition-all duration-200 text-sm active:scale-90 disabled:opacity-40 disabled:cursor-not-allowed" ${index === 0 ? "disabled" : ""}>
+                    <button data-action="up" title="Monter" class="touch-target w-8 h-8 rounded-md bg-purple-900/50 hover:bg-purple-700 transition-all duration-200 text-sm active:scale-90 disabled:opacity-40 disabled:cursor-not-allowed" ${index === 0 ? "disabled" : ""}>
                         <i class="fa-solid fa-arrow-up"></i>
                     </button>
-                    <button data-action="down" title="Descendre" class="w-8 h-8 rounded-md bg-purple-900/50 hover:bg-purple-700 transition-all duration-200 text-sm active:scale-90 disabled:opacity-40 disabled:cursor-not-allowed" ${index === state.blocks.length - 1 ? "disabled" : ""}>
+                    <button data-action="down" title="Descendre" class="touch-target w-8 h-8 rounded-md bg-purple-900/50 hover:bg-purple-700 transition-all duration-200 text-sm active:scale-90 disabled:opacity-40 disabled:cursor-not-allowed" ${index === state.blocks.length - 1 ? "disabled" : ""}>
                         <i class="fa-solid fa-arrow-down"></i>
                     </button>
-                    <button data-action="delete" title="Supprimer" class="w-8 h-8 rounded-md bg-red-900/50 hover:bg-red-600 transition-all duration-200 text-sm active:scale-90">
+                    <button data-action="delete" title="Supprimer" class="touch-target w-8 h-8 rounded-md bg-red-900/50 hover:bg-red-600 transition-all duration-200 text-sm active:scale-90">
                         <i class="fa-solid fa-trash-can"></i>
                     </button>
                 </div>
@@ -1035,7 +1035,7 @@ function renderMusicTracks(tracks, provider) {
                 <p class="text-xs text-gray-400">${track.duration ? Math.round(track.duration) + " s · " : ""}Généré par ${provider === "udio" ? "Udio" : "Suno"}</p>
             </div>
             <a href="${escapeHtml(url)}" target="_blank" rel="noopener" download title="Télécharger"
-               class="w-9 h-9 rounded-lg bg-purple-900/60 hover:bg-purple-700 flex items-center justify-center text-sm transition">
+               class="touch-target w-9 h-9 rounded-lg bg-purple-900/60 hover:bg-purple-700 flex items-center justify-center text-sm transition">
                 <i class="fa-solid fa-download"></i>
             </a>
             <audio preload="none" src="${escapeHtml(url)}"></audio>

@@ -207,6 +207,23 @@
             .btn { width: 100%; }
         }
 
+        /* ============================================================
+           RESPONSIVE / TOUCH — mobiles & tablettes
+           ============================================================ */
+        button, a, [role="button"] { -webkit-tap-highlight-color: transparent; }
+        body { overflow-x: hidden; }
+
+        @media (max-width: 640px) {
+            input, select, textarea { font-size: 16px !important; }
+            header nav a,
+            .btn { min-height: 44px; }
+        }
+
+        @media (max-width: 360px) {
+            .tracks-grid { grid-template-columns: 1fr; }
+            .track-cover { width: 52px; height: 52px; font-size: 1.25rem; }
+        }
+
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-track { background: #1e1b31; }
         ::-webkit-scrollbar-thumb { background: #4c3f91; border-radius: 4px; }
