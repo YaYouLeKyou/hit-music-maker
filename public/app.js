@@ -1243,6 +1243,12 @@ async function performPublish() {
                 throw new Error("Fichier trop volumineux : la limite d'envoi direct est de 4,5 Mo sur Vercel. " +
                     "Utilisez un fichier MP3 plus léger ou le mode « Lien » avec une URL MP3 directe.");
             }
+            if (res.status === 504) {
+                throw new Error("Le serveur a dépassé son temps de traitement (60 s sur le plan Vercel gratuit). " +
+                    "La publication complète (pochette IA + vidéo + upload) dépasse ce temps pour une chanson entière. " +
+                    "Activez un plan ou un réglage Vercel permettant une exécution prolongée (maxDuration 300 s), " +
+                    "ou réessayez hors pic. Votre MP3 reste intact — vous pouvez relancer.");
+            }
             throw new Error(`Réponse serveur illisible (HTTP ${res.status})`);
         }
         console.log("[Upload & Publier] Réponse serveur :", res.status, data);
