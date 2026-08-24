@@ -717,7 +717,9 @@ app.post("/api/publish", upload.single('file'), async (req, res) => {
 
     try {
         // Get audio source
-        const audioSource = req.file?.path || req.body?.audioUrl;
+        // Sources acceptées : fichier téléversé (disque OU mémoire), URL Blob
+        // (upload cloud navigateur), ou lien direct Suno/Udio/CDN.
+        const audioSource = req.file?.path || req.file?.buffer || req.body?.blobAudioUrl || req.body?.audioUrl;
         if (!audioSource) {
             console.error("[PUBLISH] No audio source provided");
             return res.status(400).json({ error: "Aucune source audio fournie : renseignez un lien Suno/Udio ou téléversez un fichier MP3." });
