@@ -346,7 +346,8 @@ async function generateWithGroq(isAutoMode = false) {
     // La clé est chargée automatiquement depuis .env par le serveur.
 
     let theme = $("gen-theme").value.trim();
-    const targetArtist = $("artist-style") ? $("artist-style").value : "";
+    const customArtist = $("artist-custom") ? $("artist-custom").value.trim() : "";
+    const targetArtist = customArtist || ($("artist-style") ? $("artist-style").value : "");
     const styleLibre = $("gen-style").value.trim();
 
     // Le style libre est fusionné dans le thème s'il est renseigné
@@ -484,8 +485,10 @@ function renderSunoSteps(currentIndex) {
     }).join("");
 }
 
-/** Dérive un titre de morceau depuis le thème ou la première ligne des paroles */
+/** Dérive un titre de morceau : champ « Titre » manuel en priorité, sinon auto */
 function deriveSongTitle() {
+    const manualTitle = $("gen-title") ? $("gen-title").value.trim() : "";
+    if (manualTitle) return manualTitle.slice(0, 80);
     const theme = $("gen-theme").value.trim();
     if (theme) return theme.split(/[.!?]/)[0].slice(0, 60);
     const firstLine = state.blocks.map(b => b.text.trim()).find(t => t && !t.startsWith("["));
@@ -635,7 +638,8 @@ async function publishToSocialMedia(audioUrl) {
             stylePrompt: state.stylePrompt.trim(),
             blocks: state.blocks,
             generatedTheme: $("gen-theme").value.trim(),
-            artistUsed: extractArtistFromStyle(state.stylePrompt),
+            songTitle: getManualSongTitle(),
+            artistUsed: getSelectedArtistName(),
             audioUrl: audioUrl
         };
 
@@ -655,7 +659,7 @@ async function publishToSocialMedia(audioUrl) {
         // Sauvegarder le track publié dans localStorage pour la page "Tracks Publiés"
         // audioUrl/coverUrl : versions locales servies par le serveur (lecture fiable)
         savePublishedTrack({
-            title: payload.generatedTheme || "Track publié",
+            title: payload.songTitle || payload.generatedTheme || "Track publié",
             audioUrl: data.audioUrl || audioUrl,
             coverUrl: data.coverUrl || "/covers/cover_of_the_day.png",
             stylePrompt: payload.stylePrompt,
@@ -689,6 +693,29 @@ function extractArtistFromStyle(style) {
     if (!style) return "Artiste Polyvalent";
     const match = style.match(/^([^,]+)/);
     return match ? match[1].trim() : "Artiste Polyvalent";
+}
+
+/**
+ * Nom d'artiste sélectionné dans le Studio :
+ * 1. Saisie manuelle « artist-custom » (prioritaire),
+ * 2. Artiste choisi dans la liste déroulante BDD Studio,
+ * 3. Sinon dérivé du style prompt.
+ */
+function getSelectedArtistName() {
+    const custom = $("artist-custom") ? $("artist-custom").value.trim() : "";
+    if (custom) return custom;
+    const select = $("artist-style");
+    if (select && select.value && select.selectedIndex > 0) {
+        const opt = select.options[select.selectedIndex];
+        const label = opt && opt.textContent ? opt.textContent.trim() : select.value;
+        return label || select.value;
+    }
+    return extractArtistFromStyle(state.stylePrompt);
+}
+
+/** Titre saisi manuellement dans la box « Titre de la chanson », sinon "" */
+function getManualSongTitle() {
+    return $("gen-title") ? $("gen-title").value.trim() : "";
 }
 
 // ============================================================
@@ -783,11 +810,12 @@ function setPublishStatus(status) {
     box.innerHTML = `<p><i class="fa-solid ${icons[status.type]} mr-2"></i>${status.html}</p>`;
 }
 
-/** Ajoute les métadonnées communes (style, thème, artiste) au FormData */
+/** Ajoute les métadonnées communes (titre, style, thème, artiste) au FormData */
 function appendCommonMetadata(formData) {
     formData.append("stylePrompt", state.stylePrompt.trim());
     formData.append("theme", $("gen-theme") ? $("gen-theme").value.trim() : "");
-    formData.append("artistUsed", extractArtistFromStyle(state.stylePrompt) || "Artiste Polyvalent");
+    formData.append("songTitle", getManualSongTitle());
+    formData.append("artistUsed", getSelectedArtistName() || "Artiste Polyvalent");
 }
 
 /** Valide la source choisie et renvoie FormData prêt pour /api/publish */
@@ -912,11 +940,11 @@ async function performPublish() {
         // Sauvegarde pour la page « Published Tracks »
         // audioUrl : version locale téléchargée par le serveur si possible
         savePublishedTrack({
-            title: ($("gen-theme") ? $("gen-theme").value.trim() : "") || "Track publié",
+            title: getManualSongTitle() || ($("gen-theme") ? $("gen-theme").value.trim() : "") || "Track publié",
             audioUrl: data.audioUrl || (currentPublishMode === PUBLISH_MODE.LINK ? $("publish-link-input").value.trim() : ""),
             coverUrl: data.coverUrl || "/covers/cover_of_the_day.png",
             stylePrompt: state.stylePrompt.trim(),
-            artistUsed: extractArtistFromStyle(state.stylePrompt),
+            artistUsed: getSelectedArtistName(),
             blocks: state.blocks
         });
     } catch (err) {

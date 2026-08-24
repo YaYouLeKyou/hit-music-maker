@@ -44,9 +44,17 @@ function buildCaption(hit) {
     const lines = [
         "🎵 CHANSON DU JOUR — Music Hit Maker Studio",
         "",
+    ];
+
+    // Titre saisi manuellement dans la box « Titre de la chanson »
+    if (hit.songTitle) {
+        lines.push("🎶 Titre : « " + String(hit.songTitle).slice(0, 80) + " »");
+    }
+
+    lines.push(
         "🎤 Artiste : " + (hit.artistUsed || "Artiste Polyvalent"),
         "💭 Thème : " + (hit.generatedTheme || "Création originale").slice(0, 200),
-    ];
+    );
 
     if (hit.stylePrompt) {
         lines.push("🎛️ Style : " + hit.stylePrompt.slice(0, 180));

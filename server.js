@@ -127,6 +127,20 @@ app.post("/api/generate", async (req, res) => {
         if ((isAutoMode || !targetArtist) && !artist) {
             artist = ARTISTS_DATABASE[Math.floor(Math.random() * ARTISTS_DATABASE.length)];
         }
+        // Artiste saisi manuellement (absent de la BDD) : profil générique
+        // construit autour du nom fourni pour guider le LLM.
+        if (!artist && targetArtist && !isAutoMode) {
+            const customName = String(targetArtist).trim();
+            console.log(`[GENERATE] Artiste personnalisé (hors BDD) : ${customName}`);
+            artist = {
+                name: customName,
+                genre: "au style de l'artiste",
+                bpm_range: "90-140",
+                instruments: "au choix cohérent avec l'univers de l'artiste",
+                flow_signature: "signature propre à cet artiste",
+                prompt_audio_preset: "modern production, polished mix"
+            };
+        }
 
         const systemPrompt = buildSystemPrompt({
             theme: typeof theme === "string" ? theme.trim() : "",
@@ -594,7 +608,12 @@ app.post("/api/publish", upload.single('file'), async (req, res) => {
         console.log(`[PUBLISH] Audio source: ${audioSource}`);
 
         // Extract metadata
-        const { stylePrompt = "", theme = "", artistUsed = "Artiste Polyvalent" } = req.body;
+        const {
+            stylePrompt = "",
+            theme = "",
+            songTitle = "",
+            artistUsed = "Artiste Polyvalent"
+        } = req.body;
         console.log(`[PUBLISH] Metadata - Style: ${stylePrompt.substring(0, 30)}..., Artist: ${artistUsed}`);
 
         // Rend l'audio disponible localement (public/uploads) pour la lecture
@@ -676,6 +695,7 @@ app.post("/api/publish", upload.single('file'), async (req, res) => {
             artistUsed,
             generatedTheme: theme,
             stylePrompt,
+            songTitle,
             music: { audioUrl: req.body?.audioUrl || "" },
             coverPath,
             videoPath

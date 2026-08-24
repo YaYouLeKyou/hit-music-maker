@@ -142,6 +142,16 @@
                         <option value="">— Choisissez un artiste (ou aléatoire) —</option>
                     </select>
 
+                    <!-- Artiste personnalisé (saisie manuelle, prioritaire sur la liste) -->
+                    <label for="artist-custom" class="block text-sm font-medium text-slate-300 mt-3 mb-1">Ou saisissez votre propre artiste <span class="text-slate-500 font-normal">(prioritaire sur la liste)</span></label>
+                    <input id="artist-custom" type="text" placeholder="Ex : MC Éclipse, Laora, …"
+                        class="w-full rounded-lg bg-night border border-purple-800/70 p-3 text-sm outline-none transition-colors duration-200 placeholder:text-slate-500 focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/30">
+
+                    <!-- Titre de la chanson (optionnel) -->
+                    <label for="gen-title" class="block text-sm font-medium text-slate-300 mt-4 mb-1">Titre de la chanson (optionnel)</label>
+                    <input id="gen-title" type="text" placeholder="Laisse vide pour un titre automatique… Ex : Néon Éternel"
+                        class="w-full rounded-lg bg-night border border-purple-800/70 p-3 text-sm outline-none transition-colors duration-200 placeholder:text-slate-500 focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/30">
+
                     <!-- Thème personnalisé (optionnel : vide = thème profond auto) -->
                     <label for="gen-theme" class="block text-sm font-medium text-slate-300 mt-4 mb-1">Thème de la chanson (optionnel)</label>
                     <textarea id="gen-theme" rows="2" placeholder="Laisse vide pour un thème profond automatique… Ex : un été à Paris"
