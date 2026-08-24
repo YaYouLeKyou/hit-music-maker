@@ -972,6 +972,8 @@ function appendCommonMetadata(formData) {
     formData.append("artistUsed", getSelectedArtistName() || "Artiste Polyvalent");
     // Texte du post édité dans la modale (vide -> légende standard du serveur)
     formData.append("caption", $("publish-caption") ? $("publish-caption").value.trim() : "");
+    // Couvert prompt (optionnel, servant à générer la pochette IA)
+    formData.append("coverPrompt", $("publish-cover-prompt") ? $("publish-cover-prompt").value.trim() : "");
 }
 
 let isCaptionLoading = false;
@@ -1671,6 +1673,32 @@ function init() {
         copyToClipboard(style, "Style Prompt copié !");
     });
 
+    // --- Cover Prompt ---
+    $("btn-copy-cover").addEventListener("click", () => {
+        const cover = $("cover-prompt").value.trim();
+        if (!cover) {
+            toast("Aucun cover prompt à copier.", "warning");
+            return;
+        }
+        copyToClipboard(cover, "Cover Prompt copié !");
+    });
+
+    $("btn-paste-cover").addEventListener("click", async () => {
+        try {
+            const text = await navigator.clipboard.readText();
+            if (!text) {
+                toast("Le presse-papiers est vide.", "warning");
+                return;
+            }
+            $("cover-prompt").value = text;
+            saveStudioState();
+            updatePreview();
+            toast("Cover Prompt collé depuis le presse-papiers !", "success");
+        } catch (err) {
+            toast("Impossible d'accéder au presse-papiers.", "error");
+        }
+    });
+
     // --- CTA final : Publier en direct (paiement Stripe puis génération auto) ---
     $("btn-generate-music").addEventListener("click", startDirectPublishFlow);
 
@@ -1698,6 +1726,19 @@ function init() {
     $("btn-publish-confirm").addEventListener("click", performPublish);
     const regenBtn = $("btn-caption-regen");
     if (regenBtn) regenBtn.addEventListener("click", generateCaptionAI);
+    $("btn-publish-cover-paste").addEventListener("click", async () => {
+        try {
+            const text = await navigator.clipboard.readText();
+            if (!text) {
+                toast("Le presse-papiers est vide.", "warning");
+                return;
+            }
+            $("publish-cover-prompt").value = text;
+            toast("Cover Prompt collé depuis le presse-papiers !", "success");
+        } catch (err) {
+            toast("Impossible d'accéder au presse-papiers.", "error");
+        }
+    });
     $("modal-publish").addEventListener("click", (e) => {
         if (e.target === $("modal-publish")) closePublishModal();
     });
