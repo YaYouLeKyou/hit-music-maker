@@ -209,15 +209,23 @@
 
                     <!-- Boutons d'action -->
                     <div class="flex gap-3 mt-5">
-                        <button id="btn-generate"
+                        <button id="btn-generate" title="Compose avec votre thème et votre artiste sélectionnés ci-dessus"
                             class="flex-1 py-3 rounded-xl font-bold text-white bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500 transition-all duration-200 shadow-lg shadow-fuchsia-600/20 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:from-fuchsia-600 disabled:hover:to-purple-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-400">
                             <i class="fa-solid fa-bolt mr-1"></i>Générer
                         </button>
-                        <button id="btn-auto"
+                        <button id="btn-auto" title="Thème profond inventé par l'IA + artiste tiré au hasard dans la BDD Studio"
                             class="flex-1 py-3 rounded-xl font-bold text-white bg-gradient-to-r from-purple-600 via-pink-600 to-rose-500 hover:from-purple-500 hover:via-pink-500 hover:to-rose-400 transition-all duration-200 shadow-lg shadow-pink-600/20 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-400">
                             <i class="fa-solid fa-wand-sparkles mr-1"></i>Création Auto
                         </button>
                     </div>
+
+                    <!-- Explication des deux modes de génération -->
+                    <p class="text-xs text-slate-500 mt-3 leading-relaxed">
+                        <i class="fa-solid fa-bolt text-fuchsia-400 mr-1"></i><span class="font-semibold text-slate-400">Générer</span>
+                        compose à partir du thème et de l'artiste que vous avez choisis ci-dessus.
+                        <i class="fa-solid fa-wand-sparkles text-pink-400 ml-2 mr-1"></i><span class="font-semibold text-slate-400">Création Auto</span>
+                        invente un thème profond et tire un artiste au hasard parmi les 36 profils de la BDD Studio.
+                    </p>
 
                     <!-- Info thème/artiste générés -->
                     <div id="gen-info" class="hidden mt-3 rounded-lg bg-purple-500/10 border border-purple-500/40 text-purple-200 text-xs p-3"></div>
