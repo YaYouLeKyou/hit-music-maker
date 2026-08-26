@@ -252,12 +252,15 @@ function buildSystemPrompt({ theme, artist, isAutoMode }) {
         "   [Pré-refrain], [Refrain], [Couplet 2], [Pont], [Outro] et des annotations (Ad-libs, chœurs).",
         "2. STYLE PROMPT (SUNO/UDIO) : Génère un prompt audio en ANGLAIS précis incluant genre,",
         "   BPM exact, instrumentation et texture vocale.",
+        "3. COVER PROMPT : Génère un prompt visuel en ANGLAIS décrivant l'ambiance, les couleurs,",
+        "   le style artistique et l'atmosphère de la pochette d'album (ex: neon cityscape, dark synthwave...).",
         "",
         "Réponds STRICTEMENT sous forme d'objet JSON valide (sans texte hors du JSON) :",
         "{",
         '  "generatedTheme": "Titre/Résumé du thème profond généré",',
         '  "artistUsed": "' + artistName + '",',
         '  "stylePrompt": "Prompt audio en anglais pour Suno",',
+        '  "coverPrompt": "Prompt visuel en anglais pour la pochette d\'album",',
         '  "blocks": [',
         '    { "type": "Intro", "text": "paroles..." },',
         '    { "type": "Couplet 1", "text": "paroles..." },',
@@ -378,6 +381,7 @@ app.post("/api/generate", async (req, res) => {
                 ? parsed.artistUsed
                 : (artist ? artist.name : ""),
             stylePrompt: typeof parsed.stylePrompt === "string" ? parsed.stylePrompt : "",
+            coverPrompt: typeof parsed.coverPrompt === "string" ? parsed.coverPrompt : "",
             blocks: Array.isArray(parsed.blocks)
                 ? parsed.blocks
                     .filter((b) => b && typeof b === "object")

@@ -65,6 +65,7 @@ const STYLE_PRESETS = [
 /** État du studio */
 let state = {
     stylePrompt: "",
+    coverPrompt: "",
     blocks: [] // [{ type, text }]
 };
 
@@ -142,6 +143,7 @@ function getApiKey() {
 function saveStudioState() {
     localStorage.setItem(LS_STUDIO, JSON.stringify({
         stylePrompt: state.stylePrompt,
+        coverPrompt: state.coverPrompt,
         blocks: state.blocks
     }));
 }
@@ -152,6 +154,7 @@ function loadStudioState() {
         if (raw) {
             const parsed = JSON.parse(raw);
             state.stylePrompt = typeof parsed.stylePrompt === "string" ? parsed.stylePrompt : "";
+            state.coverPrompt = typeof parsed.coverPrompt === "string" ? parsed.coverPrompt : "";
             state.blocks = Array.isArray(parsed.blocks)
                 ? parsed.blocks.filter(b => b && typeof b.type === "string").map(b => ({ type: b.type, text: typeof b.text === "string" ? b.text : "" }))
                 : [];
@@ -386,6 +389,11 @@ async function generateWithGroq(isAutoMode = false) {
         if (data.stylePrompt) {
             state.stylePrompt = data.stylePrompt;
             $("style-prompt").value = data.stylePrompt;
+        }
+        if (data.coverPrompt) {
+            state.coverPrompt = data.coverPrompt;
+            const coverField = $("cover-prompt");
+            if (coverField) coverField.value = data.coverPrompt;
         }
         if (Array.isArray(data.blocks) && data.blocks.length > 0) {
             state.blocks = data.blocks;
@@ -887,7 +895,10 @@ function openPublishModal() {
     document.body.style.overflow = "hidden";
     setPublishMode(currentPublishMode);
     setPublishStatus(null);
-    generateCaptionAI(); // préremplit le texte du post avec l'IA (modifiable)
+    generateCaptionAI();
+    if ($("publish-cover-prompt") && state.coverPrompt) {
+        $("publish-cover-prompt").value = state.coverPrompt;
+    }
 }
 
 /** Ferme la fenêtre (bloquée pendant une publication) */
@@ -1757,7 +1768,9 @@ function init() {
         }
         state.blocks = [];
         state.stylePrompt = "";
+        state.coverPrompt = "";
         $("style-prompt").value = "";
+        if ($("cover-prompt")) $("cover-prompt").value = "";
         saveStudioState();
         renderBlocks();
         updatePreview();
