@@ -49,7 +49,13 @@ app.use(
                 ],
                 imgSrc: ["'self'", "data:", "blob:", "https:"],
                 mediaSrc: ["'self'", "data:", "blob:", "https:"],
-                connectSrc: ["'self'"],
+                connectSrc: [
+                    "'self'",
+                    "https://*.blob.vercel-storage.com",
+                    "https://graph.facebook.com",
+                    "https://*.facebook.com",
+                    "https://*.instagram.com"
+                ],
                 workerSrc: ["'self'", "blob:"],
                 childSrc: ["'self'", "blob:"],
                 frameSrc: ["'self'", "https://*.suno.com", "https://*.udio.com", "https://*.facebook.com", "https://*.instagram.com"]
@@ -1238,14 +1244,19 @@ app.post("/api/publish", upload.single('file'), async (req, res) => {
                     outPath: path.join(PUBLIC_UPLOADS_DIR, `video-${Date.now()}.mp4`)
                 });
                 videoPath = igResult.path;
-                // Facebook : toute la chanson (pas de plafond 60 s).
-                const fbResult = await createCoverVideo({
-                    imagePath: coverPath,
-                    audioPath: audioFile,
-                    outPath: path.join(PUBLIC_UPLOADS_DIR, `video-full-${Date.now()}.mp4`),
-                    duration: Number(process.env.VIDEO_MAX_DURATION_FULL || 3600)
-                });
-                videoPathFull = fbResult.path;
+                // Facebook : vidéo complète uniquement hors serverless (Vercel free = 60s).
+                // Sur Vercel, on saute le rendu intégral pour éviter le timeout ;
+                // Facebook recevra le clip 60s (videoPath) en repli.
+                if (!IS_SERVERLESS) {
+                    const fbDuration = Number(process.env.VIDEO_MAX_DURATION_FULL || 300);
+                    const fbResult = await createCoverVideo({
+                        imagePath: coverPath,
+                        audioPath: audioFile,
+                        outPath: path.join(PUBLIC_UPLOADS_DIR, `video-full-${Date.now()}.mp4`),
+                        duration: fbDuration
+                    });
+                    videoPathFull = fbResult.path;
+                }
             } catch (vidErr) {
                 console.warn("⚠️ [PUBLISH] Génération vidéo impossible — repli photo : " + vidErr.message);
             }

@@ -63,7 +63,7 @@ function createCoverVideo({ imagePath, audioPath, outPath, duration }) {
             "fps=30"
         ].join(","),
         "-c:v", "libx264",
-        "-preset", "medium",                 // ultrafast forçait le profil Baseline (rejeté par Meta)
+        "-preset", "fast",                  // preset rapide, reste compatible Meta (profile high)
         "-b:v", `${videoBitrate}k`,          // débit ciblé (pochette fixe = peu de débit nécessaire)
         "-maxrate", `${videoBitrate}k`,      // plafond dur pour garantir la taille du fichier
         "-bufsize", `${videoBitrate * 2}k`,

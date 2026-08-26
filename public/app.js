@@ -1257,10 +1257,11 @@ async function performPublish() {
                     "Utilisez un fichier MP3 plus léger ou le mode « Lien » avec une URL MP3 directe.");
             }
             if (res.status === 504) {
-                throw new Error("Le serveur a dépassé son temps de traitement (60 s sur le plan Vercel gratuit). " +
-                    "La publication complète (pochette IA + vidéo + upload) dépasse ce temps pour une chanson entière. " +
-                    "Activez un plan ou un réglage Vercel permettant une exécution prolongée (maxDuration 300 s), " +
-                    "ou réessayez hors pic. Votre MP3 reste intact — vous pouvez relancer.");
+                throw new Error("Le serveur a mis trop de temps à répondre (timeout). " +
+                    "Sur Vercel gratuit, la limite est de 60 s. " +
+                    "Essayez un fichier MP3 plus court, désactivez la génération vidéo, " +
+                    "ou passez sur un plan Vercel avec maxDuration >= 300 s. " +
+                    "Votre MP3 reste intact — vous pouvez relancer.");
             }
             throw new Error(`Réponse serveur illisible (HTTP ${res.status})`);
         }
