@@ -21,7 +21,42 @@ const PORT = process.env.PORT || 3000;
 const IS_PROD = (process.env.NODE_ENV || "").toLowerCase() === "production";
 
 // --- Security : Helmet (X-Frame-Options, X-Content-Type-Options, HSTS, …) ---
-app.use(helmet());
+// CSP est configuré pour autoriser les CDN utilisés par le frontend
+// (Tailwind CDN, lamejs, esm.sh) tout en bloquant les sources non autorisées.
+app.use(
+    helmet({
+        contentSecurityPolicy: {
+            directives: {
+                defaultSrc: ["'self'"],
+                scriptSrc: [
+                    "'self'",
+                    "https://cdn.tailwindcss.com",
+                    "https://cdn.jsdelivr.net",
+                    "https://esm.sh",
+                    "https://cdn.jsdelivr.net/npm/lamejs@1.2.0/lame.min.js",
+                    "'unsafe-inline'"
+                ],
+                styleSrc: [
+                    "'self'",
+                    "https://fonts.googleapis.com",
+                    "https://cdnjs.cloudflare.com",
+                    "'unsafe-inline'"
+                ],
+                fontSrc: [
+                    "'self'",
+                    "https://fonts.gstatic.com",
+                    "https://cdnjs.cloudflare.com"
+                ],
+                imgSrc: ["'self'", "data:", "blob:", "https:"],
+                mediaSrc: ["'self'", "data:", "blob:", "https:"],
+                connectSrc: ["'self'"],
+                workerSrc: ["'self'", "blob:"],
+                childSrc: ["'self'", "blob:"],
+                frameSrc: ["'self'", "https://*.suno.com", "https://*.udio.com", "https://*.facebook.com", "https://*.instagram.com"]
+            }
+        }
+    })
+);
 
 // --- Security : CORS restreint à l'origine de production ---
 // On évite que n'importe quel site puisse appeler les API publiques depuis
