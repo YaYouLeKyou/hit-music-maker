@@ -323,11 +323,11 @@ async function publishFacebookVideo(hit, videoSource, caption) {
     const postId = data.post_id || videoId;
     console.log(`✅ [SOCIAL] Vidéo Facebook publiée : https://facebook.com/${postId}`);
 
-    // Récupère l'URL publique du MP4 (CDN Meta) — secours uniquement :
-    // la voie privilégiée pour le Reel est l'upload binaire direct
-    // (rupload) qui n'a pas besoin de cette URL.
+    // Récupère l'URL publique du MP4 (CDN Meta). C'est cette URL qui servira
+    // de video_url pour le Reel Instagram (l'API Graph l'exige désormais).
+    // La vidéo doit être encodée par Facebook : on attend donc plus longtemps.
     let sourceUrl = null;
-    const maxTries = 3;
+    const maxTries = 12;
     for (let attempt = 1; attempt <= maxTries; attempt++) {
         try {
             const info = await graphGet(videoId, { fields: "source", access_token: FB_PAGE_ACCESS_TOKEN });
@@ -339,10 +339,10 @@ async function publishFacebookVideo(hit, videoSource, caption) {
         } catch (e) {
             console.warn(`⚠️ [SOCIAL] source vidéo FB non dispo (${attempt}/${maxTries}) : ${e.message}`);
         }
-        if (attempt < maxTries) await sleep(4000);
+        if (attempt < maxTries) await sleep(5000);
     }
     if (!sourceUrl) {
-        console.warn("⚠️ [SOCIAL] URL source vidéo FB toujours indisponible après 45 s — Reel Instagram compromis.");
+        console.warn("⚠️ [SOCIAL] URL source vidéo FB toujours indisponible — Reel Instagram compromis (repli photo).");
     }
 
     return { postId, videoId, sourceUrl };
@@ -350,8 +350,10 @@ async function publishFacebookVideo(hit, videoSource, caption) {
 
 /**
  * Étape 1 — Crée le conteneur Reel Instagram et y téléverse la vidéo.
- * Priorité : fichier local via l'API Resumable Upload (rupload, aucun URL
- * publique requise) ; sinon video_url publique.
+ * Priorité : upload binaire resumable direct (rupload, bytes bruts) depuis le
+ * fichier local — c'est le seul flux qui garantit qu'Instagram reçoit la
+ * piste audio (le fichier source). Le video_url public est un repli quand il
+ * n'y a pas de fichier local.
  * Retourne { creationId } — la publication se fait via finalizeInstagramReel().
  */
 async function createInstagramReelContainer(hit, videoUrl, localVideoPath, caption) {
@@ -359,49 +361,71 @@ async function createInstagramReelContainer(hit, videoUrl, localVideoPath, capti
         throw new Error("Instagram non configuré (INSTAGRAM_ACCOUNT_ID / INSTAGRAM_ACCESS_TOKEN).");
     }
 
-    const containerParams = {
-        media_type: "REELS",
-        caption,
-        share_to_feed: "true",
-        access_token: IG_ACCESS_TOKEN
-    };
-
-    let videoBytes = null;
+    // CAS 1 : fichier local disponible -> upload resumable direct (bytes bruts).
+    // Le flux documenté Meta ne nécessite AUCUNE URL publique et envoie la
+    // vidéo exacte (audio compris) via le protocole rupload.
     if (localVideoPath && fs.existsSync(localVideoPath)) {
-        // Voie privilégiée : upload binaire direct (pas besoin d'URL publique)
-        videoBytes = fs.readFileSync(localVideoPath);
-    } else if (videoUrl && /^https?:\/\//i.test(videoUrl)) {
-        containerParams.video_url = videoUrl;
-    } else {
-        throw new Error("aucune source vidéo disponible pour le Reel");
-    }
+        console.log("📦 [SOCIAL] Init conteneur Reel Instagram (resumable, upload direct)…");
+        const init = await graphPostForm(`${IG_USER_ID}/media`, {
+            media_type: "REELS",
+            upload_type: "resumable",
+            caption,
+            share_to_feed: "true",
+            access_token: IG_ACCESS_TOKEN
+        });
+        const creationId = init.id;
+        if (!creationId) {
+            throw new Error("Réponse inattendue à l'init du Reel Instagram (resumable) : " + JSON.stringify(init));
+        }
 
-    console.log("📦 [SOCIAL] Création du conteneur Reel Instagram…");
-    const container = await graphPostForm(`${IG_USER_ID}/media`, containerParams);
-    const creationId = container.id;
-
-    if (videoBytes) {
-        console.log(`📤 [SOCIAL] Envoi de la vidéo vers Instagram (${(videoBytes.length / 1048576).toFixed(1)} Mo)…`);
-        const up = await fetch(
-            `https://rupload.facebook.com/ig-graph-upload/${GRAPH_VERSION}/${creationId}`,
-            {
-                method: "POST",
-                headers: {
-                    "Authorization": `OAuth ${IG_ACCESS_TOKEN}`,
-                    "offset": "0",
-                    "file_type": "video/mp4"
-                },
-                body: videoBytes
-            }
-        );
+        const videoBytes = fs.readFileSync(localVideoPath);
+        const total = videoBytes.length;
+        console.log(`📤 [SOCIAL] Upload resumable vers Instagram (${(total / 1048576).toFixed(1)} Mo)…`);
+        // Protocole rupload de Meta (doc officielle) : le corps de la requête
+        // POST doit contenir les BYTES BRUTS du MP4 (avec la piste audio),
+        // via --data-binary — PAS de multipart/form-data (rejeté → 400).
+        // NB : on utilise l'URL construite avec GRAPH_VERSION (ex: v21.0) et
+        // NON l'URL `uri` renvoyée par l'init — Meta renvoie parfois une `uri`
+        // à version incohérente (ex: v26.0) rejetée en 400 "ProcessingFailedError".
+        const uploadUrl = `https://rupload.facebook.com/ig-api-upload/${GRAPH_VERSION}/${creationId}`;
+        const up = await fetch(uploadUrl, {
+            method: "POST",
+            headers: {
+                "Authorization": `OAuth ${IG_ACCESS_TOKEN}`,
+                "offset": "0",
+                "file_size": String(total)
+            },
+            body: videoBytes // bytes bruts du MP4 (avec la piste audio)
+        });
         const ud = await up.json().catch(() => null);
         if (!up.ok || !ud || ud.success !== true) {
-            throw new Error(`envoi vidéo Instagram : ${ud?.message || "HTTP " + up.status}`);
+            const errText = ud ? JSON.stringify(ud) : await up.text().catch(() => "");
+            throw new Error(`envoi vidéo Instagram (resumable) : HTTP ${up.status} ${errText}`);
         }
-        console.log("✅ [SOCIAL] Vidéo envoyée à Instagram.");
+        console.log("✅ [SOCIAL] Vidéo envoyée à Instagram (resumable).");
+        return { creationId };
     }
 
-    return { creationId };
+    // CAS 2 : pas de fichier local mais URL vidéo publique -> container video_url.
+    // Repli quand le disque local /tmp n'est pas disponible (rare).
+    if (videoUrl && /^https?:\/\//i.test(videoUrl)) {
+        console.log("📦 [SOCIAL] Création du conteneur Reel Instagram (video_url)…");
+        const container = await graphPostForm(`${IG_USER_ID}/media`, {
+            media_type: "REELS",
+            video_url: videoUrl,
+            caption,
+            share_to_feed: "true",
+            access_token: IG_ACCESS_TOKEN
+        });
+        const creationId = container.id;
+        if (!creationId) {
+            throw new Error("Réponse inattendue à la création du Reel Instagram (video_url) : " + JSON.stringify(container));
+        }
+        console.log(`✅ [SOCIAL] Conteneur Reel Instagram créé (video_url) : ${creationId}`);
+        return { creationId };
+    }
+
+    throw new Error("aucune source vidéo disponible pour le Reel");
 }
 
 /**
@@ -497,13 +521,32 @@ async function publishToAllSocial(hit) {
     }
 
     if (!results.instagram && !results.instagramPendingCreationId) {
-        try {
-            const igImageUrl = (results.facebook && results.facebook.imageUrl) ||
-                (hit.coverPath && /^https?:\/\//i.test(hit.coverPath) ? hit.coverPath : null);
-            results.instagram = await publishInstagram(hit, igImageUrl, caption);
-        } catch (err) {
-            results.instagramError = err.message;
-            console.error("❌ [SOCIAL] Échec publication Instagram :", err.message);
+        let igImageUrl = (results.facebook && results.facebook.imageUrl) ||
+            (hit.coverPath && /^https?:\/\//i.test(hit.coverPath) ? hit.coverPath : null);
+
+        // Pas d'URL publique ? On publie la pochette sur Facebook pour récupérer
+        // une URL CDN publique (imageUrl) directement utilisable par Instagram.
+        if (!igImageUrl && hit.coverPath) {
+            try {
+                const fbPhoto = await publishFacebook(hit, caption);
+                if (fbPhoto && fbPhoto.imageUrl) {
+                    igImageUrl = fbPhoto.imageUrl;
+                    if (!results.facebook) results.facebook = fbPhoto;
+                }
+            } catch (e) {
+                console.warn("⚠️ [SOCIAL] Impossible d'obtenir une URL d'image publique via Facebook : " + e.message);
+            }
+        }
+
+        if (igImageUrl) {
+            try {
+                results.instagram = await publishInstagram(hit, igImageUrl, caption);
+            } catch (err) {
+                results.instagramError = err.message;
+                console.error("❌ [SOCIAL] Échec publication Instagram :", err.message);
+            }
+        } else {
+            results.instagramError = results.instagramError || "Pas d'URL d'image publique disponible pour Instagram.";
         }
     }
 
@@ -547,7 +590,7 @@ async function generateHFArtwork(prompt, apiKey, model = HF_DEFAULT_MODEL) {
 
     const fullPrompt =
         "album cover art for a song, " + prompt +
-        ", vibrant colors, cinematic lighting, highly detailed digital art, square composition, no text";
+        ", vibrant colors, cinematic lighting, highly detailed digital art, square composition";
 
     let lastError = null;
 
