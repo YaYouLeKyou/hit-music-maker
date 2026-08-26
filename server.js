@@ -113,6 +113,11 @@ app.use(express.static(path.join(__dirname, "public")));
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_MODEL = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
 
+// --- Configuration Gemini (fallback LLM quand Groq est en 429 / indisponible) ---
+const GEMINI_API_KEY = process.env.BANANA_API_KEY || process.env.GEMINI_API_KEY || "";
+const GEMINI_TEXT_MODEL = process.env.GEMINI_TEXT_MODEL || "gemini-3.6-flash";
+const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
+
 // --- Configuration Stripe (« Publier en direct » : service payant) ---
 const STRIPE_ENABLED = !!process.env.STRIPE_SECRET_KEY;
 let stripe = null;
@@ -330,6 +335,9 @@ app.post("/api/generate", async (req, res) => {
             "Réponds UNIQUEMENT avec l'objet JSON valide, sans texte autour, sans balises markdown."
         ].join("\n");
 
+        let rawContent = null;
+        let usedFallback = false;
+
         const groqResponse = await fetch(GROQ_API_URL, {
             method: "POST",
             headers: {
@@ -355,17 +363,40 @@ app.post("/api/generate", async (req, res) => {
             } catch (_) {
                 detail = await groqResponse.text().catch(() => "");
             }
-            const status = groqResponse.status === 401 ? 401 : 502;
-            return res.status(status).json({
-                error: `Erreur API Groq (${groqResponse.status}) : ${detail || "réponse inattendue"}`
-            });
+
+            const isRateLimit = groqResponse.status === 429;
+            if (isRateLimit && GEMINI_API_KEY) {
+                console.warn(`[generate] Groq rate limit (429) — bascule vers Gemini : ${detail}`);
+                usedFallback = true;
+            } else {
+                const status = groqResponse.status === 401 ? 401 : 502;
+                return res.status(status).json({
+                    error: `Erreur API Groq (${groqResponse.status}) : ${detail || "réponse inattendue"}`
+                });
+            }
+        } else {
+            const data = await groqResponse.json();
+            rawContent = data?.choices?.[0]?.message?.content;
+            if (!rawContent && GEMINI_API_KEY) {
+                console.warn("[generate] Réponse Groq vide — bascule vers Gemini.");
+                usedFallback = true;
+            }
         }
 
-        const data = await groqResponse.json();
-        const rawContent = data?.choices?.[0]?.message?.content;
-
-        if (!rawContent) {
-            return res.status(502).json({ error: "Réponse vide de l'API Groq." });
+        if (usedFallback) {
+            console.log("[generate] Génération via Gemini (fallback Groq)…");
+            try {
+                rawContent = await callGemini({
+                    theme: typeof theme === "string" ? theme.trim() : "",
+                    artist,
+                    isAutoMode: Boolean(isAutoMode)
+                });
+            } catch (geminiErr) {
+                console.error("[generate] Fallback Gemini échoué :", geminiErr.message);
+                return res.status(502).json({
+                    error: `Groq indisponible et fallback Gemini échoué : ${geminiErr.message}`
+                });
+            }
         }
 
         // Extraction robuste du JSON (gère les balises markdown éventuelles)
@@ -373,10 +404,10 @@ app.post("/api/generate", async (req, res) => {
         try {
             parsed = extractJson(rawContent);
         } catch (parseErr) {
-            console.error("[generate] Échec parsing JSON Groq :", parseErr.message);
+            console.error("[generate] Échec parsing JSON :", parseErr.message);
             return res.status(502).json({
                 error: "Impossible d'extraire un JSON valide de la réponse du modèle.",
-                raw: rawContent.slice(0, 2000)
+                raw: (rawContent || "").slice(0, 2000)
             });
         }
 
@@ -920,6 +951,46 @@ function extractJson(text) {
         throw new Error("Aucun objet JSON trouvé dans la réponse.");
     }
     return JSON.parse(cleaned.slice(start, end + 1));
+}
+
+/** Appelle l'API Gemini en mode texte (fallback LLM). */
+async function callGemini({ theme, artist, isAutoMode }) {
+    const systemPrompt = buildSystemPrompt({ theme, artist, isAutoMode });
+    const userInstruction = [
+        "Génère la chanson complète conformément aux instructions du système.",
+        "Réponds UNIQUEMENT avec l'objet JSON valide, sans texte autour, sans balises markdown."
+    ].join("\n");
+    const combinedPrompt = systemPrompt + "\n\n" + userInstruction;
+
+    const url = `${GEMINI_API_BASE}/${GEMINI_TEXT_MODEL}:generateContent`;
+    const response = await fetch(url, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": GEMINI_API_KEY
+        },
+        body: JSON.stringify({
+            contents: [{ parts: [{ text: combinedPrompt }] }],
+            generationConfig: { temperature: 0.9, responseMimeType: "application/json" }
+        })
+    });
+
+    if (!response.ok) {
+        let detail = "";
+        try {
+            const errBody = await response.json();
+            detail = errBody?.error?.message || JSON.stringify(errBody);
+        } catch (_) {
+            detail = "";
+        }
+        throw new Error(`Erreur API Gemini (${response.status}) : ${detail || "réponse inattendue"}`);
+    }
+
+    const data = await response.json();
+    const parts = data?.candidates?.[0]?.content?.parts || [];
+    const text = parts.map((p) => p.text || "").join("").trim();
+    if (!text) throw new Error("Réponse vide de l'API Gemini.");
+    return text;
 }
 
 // --- Détection serverless (Vercel) ---
