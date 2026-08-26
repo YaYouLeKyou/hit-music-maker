@@ -54,7 +54,15 @@ app.use(
                     "https://*.blob.vercel-storage.com",
                     "https://graph.facebook.com",
                     "https://*.facebook.com",
-                    "https://*.instagram.com"
+                    "https://*.instagram.com",
+                    "https://rupload.facebook.com",
+                    "https://api.groq.com",
+                    "https://generativelanguage.googleapis.com",
+                    "https://api.sunoapi.org",
+                    "https://udioapi.pro",
+                    "https://cdn1.suno.ai",
+                    "https://router.huggingface.co",
+                    "https://api-inference.huggingface.co"
                 ],
                 workerSrc: ["'self'", "blob:"],
                 childSrc: ["'self'", "blob:"],
@@ -1041,6 +1049,56 @@ app.get("/uploads/:filename", (req, res) => {
     require("fs").createReadStream(filePath).pipe(res);
 });
 
+// --- Stockage serveur des tracks publiées ---
+// En local : dossier published/ à la racine du projet.
+// Sur Vercel (serverless) : /tmp/published (filesystem en lecture seule ailleurs).
+const PUBLISHED_TRACKS_DIR = IS_SERVERLESS
+    ? path.join(require("os").tmpdir(), "published")
+    : path.join(__dirname, "published");
+ensureDir(PUBLISHED_TRACKS_DIR);
+
+function getPublishedTrackPath(id) {
+    return path.join(PUBLISHED_TRACKS_DIR, `${id}.json`);
+}
+
+function savePublishedTrackToDisk(track) {
+    try {
+        const p = getPublishedTrackPath(track.id);
+        require("fs").writeFileSync(p, JSON.stringify(track, null, 2));
+        return true;
+    } catch (err) {
+        console.warn("[PUBLISHED] Sauvegarde impossible :", err.message);
+        return false;
+    }
+}
+
+function loadAllPublishedTracks() {
+    try {
+        const files = require("fs").readdirSync(PUBLISHED_TRACKS_DIR).filter(f => f.endsWith(".json"));
+        const tracks = [];
+        for (const f of files) {
+            try {
+                const raw = require("fs").readFileSync(path.join(PUBLISHED_TRACKS_DIR, f), "utf8");
+                tracks.push(JSON.parse(raw));
+            } catch {}
+        }
+        return tracks.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    } catch {
+        return [];
+    }
+}
+
+function deletePublishedTrackFromDisk(id) {
+    try {
+        const p = getPublishedTrackPath(id);
+        if (require("fs").existsSync(p)) require("fs").unlinkSync(p);
+        return true;
+    } catch (err) {
+        console.warn("[PUBLISHED] Suppression impossible :", err.message);
+        return false;
+    }
+}
+
 /** Vérifie qu'un buffer ressemble à un fichier audio (magic bytes courants). */
 function looksLikeAudio(buffer) {
     if (!buffer || buffer.length < 16) return false;
@@ -1171,6 +1229,19 @@ const upload = require('multer')({
     }
 });
 
+// --- PUBLISHED TRACKS ENDPOINTS ---
+app.get("/api/published", (req, res) => {
+    const tracks = loadAllPublishedTracks();
+    res.json(tracks);
+});
+
+app.delete("/api/published/:id", (req, res) => {
+    const { id } = req.params;
+    const ok = deletePublishedTrackFromDisk(id);
+    if (!ok) return res.status(500).json({ error: "Impossible de supprimer le track." });
+    res.json({ status: "DELETED", id });
+});
+
 // --- PUBLISH ENDPOINT ---
 app.post("/api/publish", upload.single('file'), async (req, res) => {
     console.log("[PUBLISH] Starting manual upload/publish process");
@@ -1274,6 +1345,8 @@ app.post("/api/publish", upload.single('file'), async (req, res) => {
         let audioUrlFinal = localAudioUrl || null;
         let coverUrlFinal = publicCoverUrl;
         let videoUrlFinal = null;
+        let videoPath = null;
+        let videoPathFull = null;
 
         if (process.env.BLOB_READ_WRITE_TOKEN) {
             const { put } = require("@vercel/blob");
@@ -1302,8 +1375,6 @@ app.post("/api/publish", upload.single('file'), async (req, res) => {
         // Nécessite un audio LOCAL + une pochette fichier.
         // Instagram : 60 s max (rupload < ~6-7 Mo). Facebook : durée complète de la
         // chanson (pas de plafond 60 s) — on génère donc deux rendus.
-        let videoPath = null;
-        let videoPathFull = null;
         if (localAudioUrl && coverPath) {
             try {
                 const { createCoverVideo } = require("./video_maker.js");
@@ -1365,16 +1436,28 @@ app.post("/api/publish", upload.single('file'), async (req, res) => {
         }
 
         console.log(`[PUBLISH] Publication completed — Facebook: ${fbOk ? "OK" : "KO"}, Instagram: ${igOk ? "OK" : "KO"}`);
+
+        const publishedTrack = {
+            id: `pub-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+            title: songTitle || theme || "Track publié",
+            artistUsed,
+            stylePrompt,
+            theme,
+            coverUrl: coverUrlFinal,
+            audioUrl: audioUrlFinal,
+            videoUrl: videoUrlFinal,
+            facebook: fbOk ? { id: publishResult.facebook.postId, url: `https://facebook.com/${publishResult.facebook.postId}` } : null,
+            instagram: igOk ? { id: publishResult.instagram.postId, url: `https://instagram.com/p/${publishResult.instagram.postId}` } : null,
+            coverGenerated,
+            videoGenerated: !!videoPath,
+            createdAt: new Date().toISOString()
+        };
+        savePublishedTrackToDisk(publishedTrack);
+
         res.json({
             status: "SUCCESS",
-            facebook: fbOk ? {
-                id: publishResult.facebook.postId,
-                url: `https://facebook.com/${publishResult.facebook.postId}`
-            } : null,
-            instagram: igOk ? {
-                id: publishResult.instagram.postId,
-                url: `https://instagram.com/p/${publishResult.instagram.postId}`
-            } : null,
+            facebook: publishedTrack.facebook,
+            instagram: publishedTrack.instagram,
             details: {
                 facebook: publishResult.facebookError || null,
                 instagram: publishResult.instagramError || null

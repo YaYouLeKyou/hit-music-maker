@@ -311,7 +311,7 @@ async function publishFacebookVideo(hit, videoSource, caption) {
         const form = new FormData();
         form.append("access_token", FB_PAGE_ACCESS_TOKEN);
         form.append("description", caption);
-        form.append("file", new Blob([fs.readFileSync(videoSource)]), path.basename(videoSource));
+        form.append("source", new Blob([fs.readFileSync(videoSource)]), path.basename(videoSource));
         const res = await fetch(`${GRAPH_BASE}/${FB_PAGE_ID}/videos`, { method: "POST", body: form });
         data = await res.json().catch(() => null);
         if (!res.ok || !data || data.error) {

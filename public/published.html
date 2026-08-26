@@ -361,17 +361,26 @@
     </div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', async function() {
             const tracksContainer = document.getElementById('tracks-container');
             
-            // Load published tracks from localStorage
             let publishedTracks = [];
             try {
-                const stored = localStorage.getItem('publishedTracks');
-                publishedTracks = stored ? JSON.parse(stored) : [];
+                const res = await fetch('/api/published');
+                if (res.ok) {
+                    publishedTracks = await res.json();
+                } else {
+                    throw new Error('API unavailable');
+                }
             } catch (e) {
-                console.error('Error loading published tracks:', e);
-                publishedTracks = [];
+                console.warn('Chargement serveur impossible, repli localStorage :', e);
+                try {
+                    const stored = localStorage.getItem('publishedTracks');
+                    publishedTracks = stored ? JSON.parse(stored) : [];
+                } catch (e2) {
+                    console.error('Error loading published tracks:', e2);
+                    publishedTracks = [];
+                }
             }
             
             if (publishedTracks.length === 0) {
@@ -390,9 +399,8 @@
             // Render tracks
             // Chaque carte a un bouton play qui pilote le lecteur GLOBAL.
             tracksContainer.innerHTML = publishedTracks.map((track, index) => {
-                // Handle cover image loading errors
-                const coverImg = track.coverUrl 
-                    ? `<img src="${track.coverUrl}" alt="Cover for ${track.title || 'Track'}" onerror="this.onerror=null; this.parentNode.innerHTML='🎵';">`
+                const coverImg = track.coverUrl
+                    ? `<img src="${track.coverUrl}" alt="Cover for ${track.title || 'Track'}" class="cover-img">`
                     : '🎵';
 
                 const hasAudio = !!(track.audioUrl || track.streamAudioUrl);
@@ -421,13 +429,28 @@
                                     <i class="fa-solid fa-download"></i> Télécharger
                                 </button>`
                             }
-                            <button class="btn btn-delete" onclick="deleteTrack('${track.id}')">
+                            <button class="btn btn-delete" data-action="delete" data-track-id="${track.id}">
                                 <i class="fa-solid fa-trash-can"></i> Supprimer
                             </button>
                         </div>
                     </div>
                 `;
             }).join('');
+
+            // Attache les événements après injection du HTML
+            document.querySelectorAll('.cover-img').forEach(img => {
+                img.addEventListener('error', () => {
+                    img.onerror = null;
+                    img.parentNode.innerHTML = '🎵';
+                });
+            });
+
+            document.querySelectorAll('.btn-delete[data-action="delete"]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const trackId = btn.getAttribute('data-track-id');
+                    if (trackId) deleteTrack(trackId);
+                });
+            });
 
             // --- Lecteur global + auto-enchaînement ---
             setupPlayer(publishedTracks);
@@ -465,7 +488,7 @@
                 titleEl.textContent = track.title || 'Sans titre';
                 artistEl.textContent = track.artistUsed || '';
                 coverEl.innerHTML = track.coverUrl
-                    ? `<img src="${track.coverUrl}" alt="" onerror="this.onerror=null; this.parentNode.innerHTML='🎵';">`
+                    ? `<img src="${track.coverUrl}" alt="" class="cover-img">`
                     : '🎵';
                 bar.classList.add('visible');
                 updateActiveCard();
@@ -559,23 +582,21 @@
             });
         }
 
-        function deleteTrack(trackId) {
+        async function deleteTrack(trackId) {
             if (!confirm("Êtes-vous sûr de vouloir supprimer ce track publié ? Cette action est irréversible.")) {
                 return;
             }
             
             try {
+                const res = await fetch(`/api/published/${encodeURIComponent(trackId)}`, { method: "DELETE" });
+                if (!res.ok) throw new Error("Suppression serveur échouée");
+                
                 const tracks = JSON.parse(localStorage.getItem('publishedTracks') || '[]');
                 const filtered = tracks.filter(track => track.id !== trackId);
                 localStorage.setItem('publishedTracks', JSON.stringify(filtered));
                 
-                // Show success message
                 showToast('Track supprimé avec succès', 'success');
-                
-                // Reload the page to reflect changes
-                setTimeout(() => {
-                    location.reload();
-                }, 1500);
+                setTimeout(() => { location.reload(); }, 1500);
             } catch (error) {
                 console.error('Error deleting track:', error);
                 showToast('Erreur lors de la suppression', 'danger');

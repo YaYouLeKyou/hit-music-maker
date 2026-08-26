@@ -1245,7 +1245,7 @@ async function performPublish() {
             }
         }
 
-        setPublishStatus({ type: "info", html: "Génération de la pochette & publication sur Facebook et Instagram en cours…" });
+        setPublishStatus({ type: "info", html: "Traitement en cours sur le serveur : génération pochette, encodage vidéo, publication Facebook & Instagram…<br><span class='text-xs opacity-75'>Cela peut prendre 1 à 3 minutes selon la taille du fichier. Ne fermez pas cette fenêtre.</span>" });
 
         const res = await fetch("/api/publish", { method: "POST", body: sendBody });
         let data;
@@ -1614,6 +1614,12 @@ function init() {
     // --- Onglets ---
     $("tab-studio").addEventListener("click", () => switchTab("studio"));
     $("tab-history").addEventListener("click", () => switchTab("history"));
+    const tabPublished = $("tab-published");
+    if (tabPublished) {
+        tabPublished.addEventListener("click", () => {
+            window.location.href = "published.html";
+        });
+    }
 
     // --- [FONCTIONNALITÉ COMMENTÉE] Clé API côté client ---
     // Décommentez ce bloc pour réactiver la gestion de la clé via l'interface.
