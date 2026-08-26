@@ -458,9 +458,9 @@ async function finalizeInstagramReel(creationId) {
 // ============================================================
 
 /**
- * Publie le hit du jour sur Facebook puis Instagram.
- * - Si une vidéo est disponible (hit.videoPath local ou hit.videoUrl http),
- *   publie une VIDÉO sur Facebook + un REEL Instagram (audio jouable).
+ * Publie le hit du jour sur Facebook (vidéo complète de la chanson) puis Instagram (Reel 60s).
+ * - Facebook : hit.videoPathFull (durée complète) > hit.videoPath > hit.videoUrl.
+ * - Instagram : Reel 60s via rupload depuis hit.videoPath (audio jouable), ou video_url.
  *   En cas d'échec vidéo, repli automatique sur le flux photo/texte.
  * - Chaque plateforme échoue indépendamment (non bloquant).
  * Retourne { facebook: {...}|null, instagram: {...}|null }.
@@ -477,7 +477,7 @@ async function publishToAllSocial(hit) {
 
         // --- Facebook : vidéo ---
         try {
-            results.facebook = await publishFacebookVideo(hit, hit.videoPath || hit.videoUrl, caption);
+            results.facebook = await publishFacebookVideo(hit, hit.videoPathFull || hit.videoPath || hit.videoUrl, caption);
         } catch (err) {
             console.error("❌ [SOCIAL] Échec publication vidéo Facebook : " + err.message);
         }

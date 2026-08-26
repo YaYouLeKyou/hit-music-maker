@@ -1184,17 +1184,29 @@ app.post("/api/publish", upload.single('file'), async (req, res) => {
 
         // --- Génération de la vidéo (pochette + audio) pour Facebook/Reels ---
         // Nécessite un audio LOCAL + une pochette fichier.
+        // Instagram : 60 s max (rupload < ~6-7 Mo). Facebook : durée complète de la
+        // chanson (pas de plafond 60 s) — on génère donc deux rendus.
         let videoPath = null;
+        let videoPathFull = null;
         if (localAudioUrl && coverPath) {
             try {
                 const { createCoverVideo } = require("./video_maker.js");
                 const audioFile = path.join(PUBLIC_UPLOADS_DIR, path.basename(localAudioUrl));
-                const result = await createCoverVideo({
+                // Reel Instagram : 60 s (défaut / limite rupload).
+                const igResult = await createCoverVideo({
                     imagePath: coverPath,
                     audioPath: audioFile,
                     outPath: path.join(PUBLIC_UPLOADS_DIR, `video-${Date.now()}.mp4`)
                 });
-                videoPath = result.path;
+                videoPath = igResult.path;
+                // Facebook : toute la chanson (pas de plafond 60 s).
+                const fbResult = await createCoverVideo({
+                    imagePath: coverPath,
+                    audioPath: audioFile,
+                    outPath: path.join(PUBLIC_UPLOADS_DIR, `video-full-${Date.now()}.mp4`),
+                    duration: Number(process.env.VIDEO_MAX_DURATION_FULL || 3600)
+                });
+                videoPathFull = fbResult.path;
             } catch (vidErr) {
                 console.warn("⚠️ [PUBLISH] Génération vidéo impossible — repli photo : " + vidErr.message);
             }
@@ -1210,6 +1222,7 @@ app.post("/api/publish", upload.single('file'), async (req, res) => {
             coverPath,
             coverBuffer,
             videoPath,
+            videoPathFull,
             videoUrl: videoUrlFinal,
             coverPrompt,
             customCaption: typeof caption === "string" ? caption.trim() : ""

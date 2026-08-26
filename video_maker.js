@@ -32,14 +32,11 @@ function getFfmpegPath() {
  * @returns {Promise<{path:string, duration:number}>}
  */
 function createCoverVideo({ imagePath, audioPath, outPath, duration }) {
-    // Instagram Reels : durée max 90 s (Meta). On plafonne à 60 s : c'est une
-    // durée standard pour un Reel, reste largement sous la limite, et limite
-    // la taille du fichier (important : Instagram refuse en 400 les gros uploads
-    // rupload qui dépassent ~6-7 Mo en requête unique).
-    const maxDuration = Math.min(
-        Number(duration || process.env.VIDEO_MAX_DURATION || 60),
-        60
-    );
+    // Instagram Reels : durée max 90 s (Meta). Le caller contrôle la durée :
+    // - défaut / IG : 60 s (sous la limite rupload ~6-7 Mo en requête unique).
+    // - Facebook    : passer une valeur grande (ex VIDEO_MAX_DURATION_FULL) pour
+    //   publier la chanson entière (FB n'a pas de plafond à 60 s).
+    const maxDuration = Number(duration || process.env.VIDEO_MAX_DURATION || 60);
 
     if (!fs.existsSync(imagePath)) return Promise.reject(new Error("Pochette introuvable : " + imagePath));
     if (!fs.existsSync(audioPath)) return Promise.reject(new Error("Audio introuvable : " + audioPath));
