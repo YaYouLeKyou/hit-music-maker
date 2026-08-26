@@ -1732,6 +1732,32 @@ function init() {
     $("publish-mode-link").addEventListener("click", () => setPublishMode(PUBLISH_MODE.LINK));
     $("publish-mode-file").addEventListener("click", () => setPublishMode(PUBLISH_MODE.FILE));
     $("publish-file-input").addEventListener("change", onPublishFileChange);
+
+    const fileDropZone = $("publish-file-section");
+    if (fileDropZone) {
+        const preventDefaults = (e) => { e.preventDefault(); e.stopPropagation(); };
+        ["dragenter", "dragover", "dragleave", "drop"].forEach((evt) => {
+            fileDropZone.addEventListener(evt, preventDefaults, false);
+        });
+        fileDropZone.addEventListener("dragenter", () => fileDropZone.classList.add("drag-over"));
+        fileDropZone.addEventListener("dragleave", () => fileDropZone.classList.remove("drag-over"));
+        fileDropZone.addEventListener("drop", (e) => {
+            fileDropZone.classList.remove("drag-over");
+            const files = e.dataTransfer?.files;
+            if (files && files.length > 0) {
+                const input = $("publish-file-input");
+                if (input) {
+                    if (typeof DataTransfer !== "undefined") {
+                        const dt = new DataTransfer();
+                        for (const f of files) dt.items.add(f);
+                        input.files = dt.files;
+                    }
+                    onPublishFileChange({ target: input });
+                }
+            }
+        });
+    }
+
     $("btn-publish-cancel").addEventListener("click", closePublishModal);
     $("btn-publish-close").addEventListener("click", closePublishModal);
     $("btn-publish-confirm").addEventListener("click", performPublish);
