@@ -11,14 +11,53 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
 
 const { ARTISTS_DATABASE } = require("./public/artistes_presets.js");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const IS_PROD = (process.env.NODE_ENV || "").toLowerCase() === "production";
+
+// --- Security : Helmet (X-Frame-Options, X-Content-Type-Options, HSTS, …) ---
+app.use(helmet());
+
+// --- Security : CORS restreint à l'origine de production ---
+// On évite que n'importe quel site puisse appeler les API publiques depuis
+// le navigateur (attaque CSRF inter-orages / abus de quota).
+const ALLOWED_ORIGIN =
+    process.env.PUBLIC_BASE_URL
+    || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
+    || `http://localhost:${PORT}`;
+app.use(
+    cors({
+        origin: ALLOWED_ORIGIN,
+        methods: ["GET", "POST", "OPTIONS"],
+        credentials: false,
+    })
+);
+
+// --- Security : rate-limiting global sur /api (anti-abus / DoS) ---
+// Le webhook Stripe est exclu : il s'agit de requêtes serveur→serveur de
+// Stripe (rejouées en cas d'échec) qui ne doivent pas être bloquées.
+// ⚠️ Sur Vercel (serverless), le store mémoire est éphémère par invocation :
+//    penser à passer à un store persistant (Redis) en prod si volume important.
+const apiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    limit: 60, // 60 requêtes / IP / 15 min (routes légères)
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Trop de requêtes, réessayez plus tard." },
+});
+app.use((req, res, next) => {
+    if (req.path.startsWith("/api") && req.path !== "/api/stripe/webhook") {
+        return apiLimiter(req, res, next);
+    }
+    return next();
+});
 
 // --- Middleware ---
-app.use(cors());
 // Le webhook Stripe exige le corps BRUT pour vérifier la signature :
 // on ne parse pas le JSON sur ce chemin précis.
 app.use((req, res, next) => {
@@ -495,8 +534,12 @@ app.post("/api/stripe/checkout", async (req, res) => {
         console.log(`[STRIPE] Session créée pour ${orderId} (${STRIPE_PRICE_EUR} €)`);
         res.json({ url: session.url, orderId });
     } catch (err) {
-        console.error("[STRIPE] Erreur checkout :", err.message);
-        res.status(500).json({ error: err.message });
+                console.error("[STRIPE] Erreur checkout :", err.message);
+        // En prod, on ne fuit pas l'erreur interne (ex: détails Stripe) vers le client.
+        const safeMsg = IS_PROD
+            ? "Erreur lors de la création de la session de paiement. Réessayez ou contactez le support."
+            : err.message;
+        res.status(500).json({ error: safeMsg });
     }
 });
 
@@ -1036,9 +1079,10 @@ app.post("/api/publish", upload.single('file'), async (req, res) => {
             theme = "",
             songTitle = "",
             caption = "",          // texte du post rédigé dans la modale (prérempli IA)
+            coverPrompt = "",       // prompt de pochette (prioritaire sur stylePrompt)
             artistUsed = "Artiste Polyvalent"
         } = req.body;
-        console.log(`[PUBLISH] Metadata - Style: ${stylePrompt.substring(0, 30)}..., Artist: ${artistUsed}`);
+        console.log(`[PUBLISH] Metadata - Style: ${stylePrompt.substring(0, 30)}..., Cover: ${coverPrompt.substring(0, 30)}..., Artist: ${artistUsed}`);
 
         // Rend l'audio disponible localement (public/uploads) pour la lecture
         // dans « Published Tracks » : les liens Suno/Udio expirent ou ne sont
@@ -1076,7 +1120,8 @@ app.post("/api/publish", upload.single('file'), async (req, res) => {
         try {
             if (typeof social.generateHFArtwork === "function" && process.env.HF_API_KEY) {
                 console.log("[PUBLISH] Génération pochette via Stable Diffusion (HF)");
-                const hf = await social.generateHFArtwork(stylePrompt || artistUsed, process.env.HF_API_KEY);
+                const hfPrompt = coverPrompt || stylePrompt || artistUsed;
+                const hf = await social.generateHFArtwork(hfPrompt, process.env.HF_API_KEY);
                 coverBuffer = hf?.buffer || null;
             } else {
                 console.log("[PUBLISH] HF indisponible — pochette de secours locale");
@@ -1165,6 +1210,8 @@ app.post("/api/publish", upload.single('file'), async (req, res) => {
             coverPath,
             coverBuffer,
             videoPath,
+            videoUrl: videoUrlFinal,
+            coverPrompt,
             customCaption: typeof caption === "string" ? caption.trim() : ""
         });
 
@@ -1226,6 +1273,17 @@ if (!process.env.VERCEL) {
         console.log("==============================================");
     });
 }
+
+// --- Global error handler (masque les erreurs internes en prod) ---
+// Capture les erreurs non gérées (async/await sans try/catch). En prod, on
+// renvoie un message générique pour ne pas fuiter d'infos internes.
+app.use((err, req, res, next) => {
+    console.error("[SERVER] Erreur non gérée :", err);
+    if (res.headersSent) return next(err);
+    res.status(err.status || 500).json({
+        error: IS_PROD ? "Erreur interne du serveur." : (err.message || "Erreur interne."),
+    });
+});
 
 // Export pour le déploiement serverless (Vercel)
 module.exports = app;
