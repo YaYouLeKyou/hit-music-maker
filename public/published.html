@@ -125,6 +125,17 @@
             border: 1px solid rgba(239, 68, 68, 0.3);
             color: #ef4444;
         }
+        .track-badge.hashtag {
+            background: rgba(124, 58, 237, 0.2);
+            border: 1px solid rgba(124, 58, 237, 0.3);
+            color: #a855f7;
+        }
+        .track-hashtags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.25rem;
+            margin-top: 0.25rem;
+        }
 
         /* --- En-tête de carte : petite pochette + titre côte à côte --- */
         .track-main {
@@ -545,6 +556,11 @@
                     const hasAudio = !!(track.audioUrl || track.streamAudioUrl);
                     const styleTag = track.style ? `<span class="track-badge style">${escapeHtml(track.style)}</span>` : '';
                     const originTag = track.origin ? `<span class="track-badge origin">${escapeHtml(track.origin)}</span>` : '';
+                    
+                    // Hashtags : utilise track.hashtags si présent, sinon fallback sur les hashtags par défaut
+                    const hashtagsHtml = (track.hashtags && Array.isArray(track.hashtags) && track.hashtags.length > 0)
+                        ? track.hashtags.map(tag => `<span class="track-badge hashtag">${escapeHtml(tag)}</span>`).join('')
+                        : '';
 
                     return `
                         <div class="track-card" data-track-id="${track.id}" data-index="${index}">
@@ -561,6 +577,7 @@
                                     ${styleTag || originTag ? `<div class="track-badges">${styleTag} ${originTag}</div>` : ''}
                                 </div>
                             </div>
+                            ${hashtagsHtml ? `<div class="track-badges track-hashtags">${hashtagsHtml}</div>` : ''}
                             ${!hasAudio ? `<p class="audio-missing"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Audio non disponible</p>` : ''}
                             <div class="btn-group">
                                 ${hasAudio ? 

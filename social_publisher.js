@@ -94,6 +94,79 @@ function buildCaption(hit) {
     return lines.join(NL);
 }
 
+/**
+ * Extrait des hashtags pertinents à partir du stylePrompt
+ * Le stylePrompt contient: genre, BPM, instruments, voix, ambiance, etc.
+ * On extrait les mots-clés musicaux pour créer des hashtags
+ */
+function extractHashtags(stylePrompt) {
+    if (!stylePrompt) return [];
+    
+    // Mots-clés communs pour générer des hashtags musicaux
+    const genreKeywords = [
+        // Genres principaux
+        'afro', 'pop', 'rock', 'rap', 'hiphop', 'trap', 'drill', 'rnb', 'soul',
+        'jazz', 'blues', 'funk', 'disco', 'house', 'techno', 'electro', 'edm',
+        'reggaeton', 'latin', 'bossa', 'nova', 'salsa', 'cumbia', 'bachata',
+        'reggae', 'dub', 'ska', 'punk', 'metal', 'hardcore', 'folk', 'country',
+        'classical', 'ambient', 'chill', 'lofi', 'synthwave', 'retrowave',
+        'indie', 'alternative', 'grime', 'ukg', 'garage', 'bass', 'dnb',
+        
+        // Instruments / éléments
+        'guitar', 'piano', 'synth', 'drums', 'bass', 'vocals', 'vocale', 'choir',
+        'percussion', 'logdrum', '808', 'dembow', 'sitar', 'accordion',
+        
+        // Ambiances / moods
+        'atmospheric', 'cinematic', 'dark', 'melodic', 'energetic', 'chill',
+        'upbeat', 'emotional', 'romantic', 'nostalgic', 'euphoric', 'vibey',
+        
+        // Production
+        'acoustic', 'electronic', 'analog', 'digital', 'radio', 'ready', 'mix',
+        'mastered', 'produced', 'beat', 'instrumental', 'lofi', 'hifi',
+        
+        // Langues
+        'french', 'francais', 'english', 'espanol', 'spanish', 'portuguese',
+        'arabic', 'korean', 'japanese', 'chinese',
+        
+        // BPM / tempo
+        'bpm', 'tempo', 'slow', 'fast', 'midtempo', 'uptempo'
+    ];
+    
+    const words = stylePrompt.toLowerCase()
+        .split(/[,\s\/]+/)  // Split by comma, space, slash
+        .map(w => w.trim())
+        .filter(w => w.length >= 3);  // Minimum 3 chars
+    
+    const hashtags = [];
+    const seen = new Set();
+    
+    for (const word of words) {
+        // Check if the word contains any genre keyword
+        for (const keyword of genreKeywords) {
+            if (word.includes(keyword) && !seen.has(keyword)) {
+                // Format: #keyword (remove non-alphanumeric, keep hyphens)
+                const tag = keyword.replace(/[^a-z0-9-]/g, '');
+                if (tag.length >= 2) {
+                    hashtags.push('#' + tag);
+                    seen.add(keyword);
+                }
+                break;
+            }
+        }
+        if (hashtags.length >= 8) break;  // Max 8 hashtags
+    }
+    
+    // Always add some base tags
+    const baseTags = ['#music', '#newmusic', '#hitmaker'];
+    for (const tag of baseTags) {
+        if (!hashtags.includes(tag)) {
+            hashtags.push(tag);
+        }
+    }
+    
+    return hashtags.slice(0, 8);  // Return max 8 hashtags
+}
+
 // ============================================================
 // Helpers Graph API
 // ============================================================
@@ -669,6 +742,7 @@ async function generateHFArtwork(prompt, apiKey, model = HF_DEFAULT_MODEL) {
 
 module.exports = {
     buildCaption,
+    extractHashtags,
     generateHFArtwork,
     publishFacebook,
     publishFacebookVideo,

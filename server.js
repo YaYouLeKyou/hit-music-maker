@@ -1880,6 +1880,8 @@ app.post("/api/publish", upload.single('file'), async (req, res) => {
                 : /Latin|Spagnole/.test(stylePrompt || "") || /Reggaeton/.test(stylePrompt || "") ? "Latino"
                 : /Français|FR/.test(stylePrompt || "") || /^French/.test(artistUsed || "") ? "Français"
                 : "International",
+            // Hashtags extraits automatiquement du stylePrompt
+            hashtags: social.extractHashtags(stylePrompt),
             coverUrl: coverUrlFinal,
             audioUrl: audioUrlFinal,
             videoUrl: videoUrlFinal,

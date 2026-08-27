@@ -143,33 +143,24 @@ async function loadAiProviders() {
         const res = await fetch("/api/ai-providers");
         if (!res.ok) return;
         window._aiProvidersData = await res.json();
-        const select = $("ai-provider");
         const providerSelect = $("provider-select");
-        if (!select || !window._aiProvidersData.providers) return;
+        if (!providerSelect || !window._aiProvidersData.providers) return;
         const lastProvider = localStorage.getItem("mhms_ai_provider") || "groq";
         
-        select.innerHTML = window._aiProvidersData.providers
-            .map(p => `<option value="${p.id}" ${p.id === lastProvider ? "selected" : ""}>${escapeHtml(p.name)} — ${escapeHtml(p.freeQuota)}</option>`)
-            .join("");
-        select.addEventListener("change", () => {
-            localStorage.setItem("mhms_ai_provider", select.value);
-            const provider = window._aiProvidersData.providers.find(p => p.id === select.value);
-            if (provider) {
-                toast(`Provider ${provider.name} sélectionné`);
-            }
-        });
-        
-        // Populate provider selector for config
         providerSelect.innerHTML = window._aiProvidersData.providers
-            .map(p => `<option value="${p.id}" ${p.id === lastProvider ? "selected" : ""}>${escapeHtml(p.name)}</option>`)
+            .map(p => {
+                const hasLocalKey = getProviderKey(p.id).length > 0;
+                const isActive = p.hasServerKey || hasLocalKey;
+                const statusLabel = isActive ? '🟢 Actif' : '🔴 Clé manquante';
+                return `<option value="${p.id}" ${p.id === lastProvider ? "selected" : ""}>${escapeHtml(p.name)} — ${statusLabel}</option>`;
+            })
             .join("");
         providerSelect.addEventListener("change", () => {
             const selectedProvider = providerSelect.value;
             loadProviderConfigPanel(selectedProvider);
         });
         
-        // Load default provider config panel
-        loadProviderConfigPanel(lastProvider);
+        // Panel caché par défaut ; affiché uniquement via "Afficher la config"
     } catch (e) {
         console.warn("[AI] Échec chargement providers:", e.message);
     }
@@ -203,11 +194,17 @@ function loadProviderConfigPanel(providerId) {
     const data = window._aiProvidersData?.providers?.find(p => p.id === providerId) || { models: [], defaultModel: "" };
     const key = getProviderKey(providerId);
     const hasKey = key.length > 0;
+    const hasServerKey = !!data.hasServerKey;
     
     panel.innerHTML = `
         <div class="flex items-center justify-between mb-2">
             <h3 class="font-bold ${colors.textLight}">${config.name}</h3>
-            ${hasKey ? '<span class="text-xs px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">Clé enregistrée ✓</span>' : '<span class="text-xs px-1.5 py-0.5 rounded bg-red-500/15 text-red-300 border border-red-500/30">Clé manquante</span>'}
+            ${hasKey 
+                ? '<span class="text-xs px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">Clé enregistrée ✓</span>'
+                : hasServerKey 
+                    ? '<span class="text-xs px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-300 border border-blue-500/30">Clé serveur ✓</span>'
+                    : '<span class="text-xs px-1.5 py-0.5 rounded bg-red-500/15 text-red-300 border border-red-500/30">Clé manquante</span>'
+            }
         </div>
         <p class="text-xs text-slate-400 mb-3">${config.desc}</p>
         
@@ -537,7 +534,7 @@ async function generateWithGroq(isAutoMode = false) {
     const customArtist = $("artist-custom") ? $("artist-custom").value.trim() : "";
     const targetArtist = customArtist || ($("artist-style") ? $("artist-style").value : "");
     const styleLibre = $("gen-style").value.trim();
-    const provider = $("ai-provider") ? $("ai-provider").value : "groq";
+    const provider = $("provider-select") ? $("provider-select").value : "groq";
 
     // Le style libre est fusionné dans le thème s'il est renseigné
     if (!isAutoMode && styleLibre) {
@@ -2237,18 +2234,6 @@ function init() {
                 toast("Veuillez saisir une clé API.", "warning");
             }
         });
-    });
-
-    // --- Bouton pour afficher/masquer la section de configuration ---
-    $("btn-toggle-ai-config").addEventListener("click", () => {
-        const panel = $("ai-provider-config-panel");
-        if (panel.classList.contains("hidden")) {
-            panel.classList.remove("hidden");
-            $("btn-toggle-ai-config").innerHTML = '<i class="fa-solid fa-chevron-up mr-1"></i>Masquer';
-        } else {
-            panel.classList.add("hidden");
-            $("btn-toggle-ai-config").innerHTML = '<i class="fa-solid fa-chevron-down mr-1"></i>Afficher';
-        }
     });
 
     // --- Sélecteur de style prédéfini (filtre les artistes + remplit le style libre) ---

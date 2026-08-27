@@ -220,11 +220,8 @@
         
         <div class="flex items-center justify-between mb-4">
             <h2 class="text-lg font-bold"><i class="fa-solid fa-cogs text-fuchsia-400 mr-2"></i>Providers IA — Clés API <span class="text-xs text-slate-400 font-normal ml-1">(stockées localement)</span></h2>
-            <button id="btn-toggle-ai-config" class="text-xs px-3 py-1.5 rounded-lg bg-purple-600/80 hover:bg-purple-500 transition-all duration-200 text-white font-semibold active:scale-95" title="Afficher/Masquer">
-                <i class="fa-solid fa-chevron-up mr-1"></i>Masquer
-            </button>
         </div>
-        <p class="text-xs text-slate-400 mb-4">Chaque provider a sa propre clé API. Par défaut l'app utilise la clé Groq du serveur (.env). Vous pouvez surcharger localement pour utiliser votre propre quota.</p>
+        <p class="text-xs text-slate-400 mb-4">Chaque provider a sa propre clé API. Par défaut l'app utilise la clé partagé Groq du serveur son quota est limité. Vous pouvez charger localement votre propre clé api pour utiliser votre propre quota journalier. choisissez votre modèle AI:</p>
         
         <!-- Sélecteur de provider -->
         <div class="flex items-center gap-3 mb-4">
@@ -238,7 +235,7 @@
         </div>
         
 <!-- Zone de configuration du provider sélectionné -->
-        <div id="ai-provider-config-panel" class="rounded-xl bg-panel border border-purple-800/50 p-4 shadow-lg">
+        <div id="ai-provider-config-panel" class="rounded-xl bg-panel border border-purple-800/50 p-4 shadow-lg hidden">
             <!-- Content is dynamically inserted here -->
         </div>
     </section>
