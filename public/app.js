@@ -13,6 +13,7 @@ const LS_API_KEY = "mhms_groq_api_key";
 const LS_HISTORY = "mhms_history";
 const LS_STUDIO = "mhms_studio_state";
 const LS_USER_ID = "mhms_user_id";
+const LS_AI_PROVIDERS = "mhms_ai_providers";
 
 const BLOCK_TYPES = ["Intro", "Couplet 1", "Couplet 2", "Pré-refrain", "Refrain", "Pont", "Outro"];
 
@@ -143,8 +144,10 @@ async function loadAiProviders() {
         if (!res.ok) return;
         const data = await res.json();
         const select = $("ai-provider");
+        const providerSelect = $("provider-select");
         if (!select || !data.providers) return;
         const lastProvider = localStorage.getItem("mhms_ai_provider") || "groq";
+        
         select.innerHTML = data.providers
             .map(p => `<option value="${p.id}" ${p.id === lastProvider ? "selected" : ""}>${escapeHtml(p.name)} — ${escapeHtml(p.freeQuota)}</option>`)
             .join("");
@@ -155,9 +158,137 @@ async function loadAiProviders() {
                 toast(`Provider ${provider.name} sélectionné`);
             }
         });
+        
+        // Populate provider selector for config
+        providerSelect.innerHTML = data.providers
+            .map(p => `<option value="${p.id}" ${p.id === lastProvider ? "selected" : ""}>${escapeHtml(p.name)}</option>`)
+            .join("");
+        providerSelect.addEventListener("change", () => {
+            const selectedProvider = providerSelect.value;
+            loadProviderConfigPanel(selectedProvider);
+        });
+        
+        // Load default provider config panel
+        loadProviderConfigPanel(lastProvider);
     } catch (e) {
         console.warn("[AI] Échec chargement providers:", e.message);
     }
+}
+
+/** Charge le panneau de configuration pour le provider sélectionné */
+function loadProviderConfigPanel(providerId) {
+    const panel = $("ai-provider-config-panel");
+    if (!panel) return;
+    
+    const providerConfig = {
+        groq: { name: "Groq", color: "fuchsia", desc: "LPU ultra-rapide avec modèles open source (Mixtral, Llama). Quota gratuit mensuel généreux.", docsUrl: "https://console.groq.com/keys", docsText: "Obtenir ma clé Groq" },
+        gemini: { name: "Google Gemini", color: "cyan", desc: "Modèles Gemini (Flash, Pro). 1 500 requêtes / jour gratuites. Fallback image Nano Banana.", docsUrl: "https://makersuite.google.com/app/apikey", docsText: "Obtenir ma clé Gemini" },
+        openrouter: { name: "OpenRouter", color: "orange", desc: "Accès à des modèles gratuits (Llama, Mistral, Qwen) via un point d'accès unifié.", docsUrl: "https://openrouter.ai/keys", docsText: "Obtenir ma clé OpenRouter" },
+        together: { name: "Together AI", color: "indigo", desc: "1 million de tokens gratuits à l'inscription. Modèles Llama 3, Mixtral et Qwen.", docsUrl: "https://api.together.xyz/settings/api-keys", docsText: "Obtenir ma clé Together" },
+        mistral: { name: "Mistral AI", color: "purple", desc: "Modèles open source français. Petit modèle 7B et Mixtral 8x22B.", docsUrl: "https://console.mistral.ai/api-keys/", docsText: "Obtenir ma clé Mistral" }
+    };
+    
+    const config = providerConfig[providerId];
+    if (!config) return;
+    
+    const key = getProviderKey(providerId);
+    const hasKey = key.length > 0;
+    
+    panel.innerHTML = `
+        <div class="flex items-center justify-between mb-2">
+            <h3 class="font-bold text-${config.color}-300">${config.name}</h3>
+            ${hasKey ? '<span class="text-xs px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">Clé enregistrée ✓</span>' : '<span class="text-xs px-1.5 py-0.5 rounded bg-red-500/15 text-red-300 border border-red-500/30">Clé manquante</span>'}
+        </div>
+        <p class="text-xs text-slate-400 mb-2">${config.desc}</p>
+        <div class="flex items-center gap-2 mb-2">
+            <input type="password" data-provider-key="${providerId}" placeholder="${config.name} clé API..."
+                value="${escapeHtml(key)}"
+                class="flex-1 rounded-lg bg-night border border-purple-800/70 p-2 text-xs outline-none transition-colors duration-200 placeholder:text-slate-500 focus:border-${config.color}-500 focus:ring-2 focus:ring-${config.color}-500/30 font-mono">
+            <button type="button" class="px-3 py-2 rounded-lg bg-${config.color}-600/80 hover:bg-${config.color}-500 transition-all duration-200 text-white font-sm font-semibold active:scale-95"
+                    data-provider-key="${providerId}">
+                <i class="fa-solid fa-save mr-1"></i>Enregistrer
+            </button>
+        </div>
+        <a href="${config.docsUrl}" target="_blank" rel="noopener"
+            class="text-xs text-${config.color}-400 hover:text-${config.color}-300">
+            <i class="fa-solid fa-key mr-1"></i>${config.docsText}
+        </a>
+    `;
+    
+    panel.classList.remove("hidden");
+    
+    // Add event listener to save button
+    panel.querySelectorAll('button[data-provider-key]').forEach(btn => {
+        btn.addEventListener("click", () => {
+            const provId = btn.dataset.providerKey;
+            const input = panel.querySelector(`input[data-provider-key="${provId}"]`);
+            if (input && input.value.trim()) {
+                saveProviderKey(provId, input.value);
+                loadProviderConfigPanel(provId); // Refresh panel
+                refreshProviderKeyUi();
+                toast(`Clé ${provId} sauvegardée !`, "success");
+            } else {
+                toast("Veuillez saisir une clé API.", "warning");
+            }
+        });
+    });
+    
+    // Add event listener to input for auto-save
+    panel.querySelectorAll('input[data-provider-key]').forEach(input => {
+        input.addEventListener("input", (e) => {
+            saveProviderKey(e.target.dataset.providerKey, e.target.value);
+            refreshProviderKeyUi();
+        });
+    });
+}
+
+// ============================================================
+// Gestion des clés API des providers IA (stockage localStorage)
+// ============================================================
+
+function getProviderKey(providerId) {
+    const providersKeys = JSON.parse(localStorage.getItem(LS_AI_PROVIDERS) || '{}');
+    return providersKeys[providerId] || "";
+}
+
+function saveProviderKey(providerId, key) {
+    const providersKeys = JSON.parse(localStorage.getItem(LS_AI_PROVIDERS) || '{}');
+    providersKeys[providerId] = key.trim();
+    localStorage.setItem(LS_AI_PROVIDERS, JSON.stringify(providersKeys));
+}
+
+function refreshProviderKeyUi() {
+    const providers = ['groq', 'gemini', 'openrouter', 'together', 'mistral'];
+    providers.forEach(provider => {
+        const key = getProviderKey(provider);
+        const hasKey = key.length > 0;
+        const input = $(`input[data-provider-key="${provider}"]`);
+        if (input) {
+            input.value = hasKey ? key : "";
+            input.type = hasKey ? "text" : "password";
+            // Update placeholder to show if key is present
+            input.placeholder = hasKey ? `Clé ${provider} configurée` : `Clé ${provider} (ex: gsk_...)`;
+        }
+    });
+}
+
+function openProviderKeyModal(providerId) {
+    const providerConfig = {
+        groq: { name: "Groq", url: "https://console.groq.com/keys" },
+        gemini: { name: "Google Gemini", url: "https://makersuite.google.com/app/apikey" },
+        openrouter: { name: "OpenRouter", url: "https://openrouter.ai/keys" },
+        together: { name: "Together AI", url: "https://api.together.xyz/settings/api-keys" },
+        mistral: { name: "Mistral AI", url: "https://console.mistral.ai/api-keys/" }
+    };
+    
+    const config = providerConfig[providerId];
+    if (!config) return;
+    
+    $("provider-key-provider-name").textContent = config.name;
+    $("provider-key-input").value = getProviderKey(providerId);
+    $("provider-key-input").focus();
+    $("modal-provider-key").dataset.provider = providerId;
+    $("modal-provider-key").classList.remove("hidden");
 }
 
 // ============================================================
@@ -1098,6 +1229,15 @@ function closePublishModal() {
     resetPublishForm();
 }
 
+/** Ferme la modale de configuration de clé provider */
+function closeProviderKeyModal() {
+    $("modal-provider-key").classList.add("hidden");
+    document.body.style.overflow = "";
+    $("provider-key-input").value = "";
+    $("provider-key-message").textContent = "";
+    delete $("modal-provider-key").dataset.provider;
+}
+
 /** Réinitialise le formulaire de la modale */
 function resetPublishForm() {
     $("publish-link-input").value = "";
@@ -1766,18 +1906,48 @@ function initPresets() {
     });
 }
 
-/** Remplit le select des artistes groupés par région/langue depuis la BDD studio */
-function populateArtistSelect() {
+/** Style-to-genre mapping for artist filtering */
+const STYLE_GENRE_MAP = {
+    "afro-pop": ["Afro", "Afro-trap", "R&B", "Soul", "Reggae", "Dub", "Afrobeat", "Zouk"],
+    "synthwave": ["Synthwave", "Electronic", "Electro", "Synth", "Retrowave", "Electronic"],
+    "acoustic pop-rock": ["Pop", "Rock", "Acoustic", "Indie", "Folk"],
+    "french drill": ["Drill", "Trap", "Rap"],
+    "piano ballad": ["Ballad", "Piano", "Acoustic", "Soul", "R&B"],
+    "edm": ["EDM", "House", "Electronic", "Dance", "Electro", "Techno", "Trance"],
+    "reggaeton": ["Reggaeton", "Latin", "Latino", "Latine"],
+    "classic soul": ["Soul", "R&B", "Funk", "Motown", "Gospel"],
+    "dub reggae": ["Reggae", "Dub", "Dancehall"],
+    "heavy metal": ["Metal", "Hard Rock", "Rock"],
+    "bossa nova": ["Bossa Nova", "Jazz", "Latin", "Brasil", "Latino"],
+    "french chanson": ["Chanson", "Variété", "Pop"]
+};
+
+/**
+ * Filter and populate artist select based on selected style
+ * @param {string|null} selectedStyle - The style preset value or null for all artists
+ */
+function populateArtistSelect(filterStyle = null) {
     const select = $("artist-style");
     if (!select || typeof ARTISTS_DATABASE === "undefined") return;
 
-    // Conserve l'option par défaut
     select.innerHTML = '<option value="">— Choisissez un artiste (ou aléatoire) —</option>';
 
+    let artistsToShow = ARTISTS_DATABASE;
+    
+    if (filterStyle) {
+        const filterGenres = STYLE_GENRE_MAP[filterStyle.toLowerCase()] || [];
+        if (filterGenres.length > 0) {
+            artistsToShow = ARTISTS_DATABASE.filter(artist => {
+                const genreLower = artist.genre.toLowerCase();
+                return filterGenres.some(fg => genreLower.includes(fg.toLowerCase()));
+            });
+        }
+    }
+
     const groups = {
-        "Français / Francophonie": ARTISTS_DATABASE.filter(a => a.language === "Français"),
-        "US / UK": ARTISTS_DATABASE.filter(a => a.language === "Anglais"),
-        "Latino": ARTISTS_DATABASE.filter(a => a.language === "Espagnol")
+        "Français / Francophonie": artistsToShow.filter(a => a.language === "Français"),
+        "US / UK": artistsToShow.filter(a => a.language === "Anglais"),
+        "Latino": artistsToShow.filter(a => a.language === "Espagnol")
     };
 
     for (const [groupLabel, artists] of Object.entries(groups)) {
@@ -1796,6 +1966,37 @@ function populateArtistSelect() {
     }
 }
 
+/** Generate a random title based on current style and artist */
+function generateRandomTitle() {
+    const prefixes = ["Nuit", "Éclipse", "Lumière", "Ombre", "Aurore", "Crépuscule", "Neon", "Reflet", "Echo", "Voyage", " Horizon", "Mystère", "Révolution", "Danse", "Rêve", "Feu", "Glace", "Tempête", "Passion", "Liberté"];
+    const suffixes = ["d'étoiles", "noir", "de minuit", "d'été", "éternel", "invisible", "cassé", "oublié", "retrouvé", "perdu", "d'or", "de flamme", "de glace", "sans fin", "doux", "sauvage", "dangereux", "mystérieux", "fou", "oublié"];
+    const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
+    const suffix = suffixes[Math.floor(Math.random() * suffixes.length)];
+    return prefix + " " + suffix;
+}
+
+/** Generate a random theme based on style and artist */
+function generateRandomTheme() {
+    const themes = [
+        "l'amour perdu dans une grande ville",
+        "la nostalgia d'un été inoubliable",
+        "la rebellion contre l'injustice sociale",
+        "la recherche de soi à travers la musique",
+        "un amour impossible entre deux mondes",
+        "la fête comme échappatoire à la réalité",
+        "le départ et l'adieu définitif",
+        "la lumière dans les moments les plus sombres",
+        "la danse comme libération émotionnelle",
+        "un souvenir d'enfance qui revient",
+        "la liberté de créer sans limites",
+        "une rencontre случайная qui change tout",
+        "le temps qui passe trop vite",
+        "l'amitié plus forte que tout",
+        "un rêve réalisé après de longues années"
+    ];
+    return themes[Math.floor(Math.random() * themes.length)];
+}
+
 function init() {
     loadStudioState();
     loadHistory();
@@ -1811,6 +2012,90 @@ function init() {
 
     // --- Chargement des providers IA disponibles ---
     loadAiProviders();
+
+    // --- Configuration des providers IA (clés stockées localement) ---
+    $("ai-providers-config").classList.remove("hidden");
+    refreshProviderKeyUi();
+    
+    // --- Bouton afficher la config depuis le sélecteur ---
+    $("btn-show-provider-config").addEventListener("click", () => {
+        const selectedProvider = $("provider-select").value;
+        loadProviderConfigPanel(selectedProvider);
+        // Scroll to the config section
+        $("ai-providers-config").scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+
+    // Auto-save des clés saisies dans le panel de configuration
+    document.querySelectorAll('#ai-provider-config-panel input[data-provider-key]').forEach(input => {
+        input.addEventListener("input", (e) => {
+            const provider = e.target.dataset.providerKey;
+            saveProviderKey(provider, e.target.value);
+            refreshProviderKeyUi();
+        });
+    });
+
+    // Save buttons pour le panel de configuration
+    document.querySelectorAll('#ai-provider-config-panel button[data-provider-key]').forEach(btn => {
+        btn.addEventListener("click", (e) => {
+            const provId = e.currentTarget.dataset.providerKey;
+            const input = $(`input[data-provider-key="${provId}"][type="password"]`);
+            if (input && input.value.trim()) {
+                saveProviderKey(provId, input.value);
+                refreshProviderKeyUi();
+                toast(`Clé ${provId} sauvegardée !`, "success");
+            } else {
+                toast("Veuillez saisir une clé API.", "warning");
+            }
+        });
+    });
+
+    // --- Bouton pour afficher/masquer la section de configuration ---
+    $("btn-toggle-ai-config").addEventListener("click", () => {
+        const panel = $("ai-provider-config-panel");
+        if (panel.classList.contains("hidden")) {
+            panel.classList.remove("hidden");
+            $("btn-toggle-ai-config").innerHTML = '<i class="fa-solid fa-chevron-up mr-1"></i>Masquer';
+        } else {
+            panel.classList.add("hidden");
+            $("btn-toggle-ai-config").innerHTML = '<i class="fa-solid fa-chevron-down mr-1"></i>Afficher';
+        }
+    });
+
+    // --- Sélecteur de style prédéfini (filtre les artistes + remplit le style libre) ---
+    $("style-select").addEventListener("change", (e) => {
+        const selectedValue = e.target.value;
+        if (selectedValue) {
+            // Remplit le champ manuel avec le style sélectionné
+            $("gen-style").value = selectedValue;
+            // Filtre les artistes par style
+            populateArtistSelect(selectedValue);
+            // Affiche aussi dans le textarea de style prompt si vide
+            if (!$("style-prompt").value.trim()) {
+                $("style-prompt").value = selectedValue;
+                state.stylePrompt = selectedValue;
+                saveStudioState();
+            }
+            toast("Style appliqué et artistes filtrés !", "success");
+        } else {
+            // Réinitialise avec tous les artistes
+            populateArtistSelect(null);
+            toast("Tous les artistes affichés", "info");
+        }
+    });
+
+    // --- Bouton refresh titre ---
+    $("btn-refresh-title").addEventListener("click", () => {
+        const newTitle = generateRandomTitle();
+        $("gen-title").value = newTitle;
+        toast("Nouveau titre généré !", "success");
+    });
+
+    // --- Bouton refresh thème ---
+    $("btn-refresh-theme").addEventListener("click", () => {
+        const newTheme = generateRandomTheme();
+        $("gen-theme").value = newTheme;
+        toast("Nouveau thème généré !", "success");
+    });
 
     // --- Onglets ---
     $("tab-studio").addEventListener("click", () => switchTab("studio"));
@@ -1940,6 +2225,33 @@ function init() {
     $("publish-mode-link").addEventListener("click", () => setPublishMode(PUBLISH_MODE.LINK));
     $("publish-mode-file").addEventListener("click", () => setPublishMode(PUBLISH_MODE.FILE));
     $("publish-file-input").addEventListener("change", onPublishFileChange);
+
+    // --- Provider Key Modal ---
+    $("btn-provider-key-save").addEventListener("click", () => {
+        const providerId = $("modal-provider-key").dataset.provider;
+        if (providerId) {
+            const key = $("provider-key-input").value.trim();
+            saveProviderKey(providerId, key);
+            refreshProviderKeyUi();
+            closeProviderKeyModal();
+            toast(`Clé ${providerId} sauvegardée !`, "success");
+        }
+    });
+    $("btn-provider-key-cancel").addEventListener("click", closeProviderKeyModal);
+    $("provider-key-show").addEventListener("click", (e) => {
+        const input = $("provider-key-input");
+        input.type = input.type === "password" ? "text" : "password";
+        e.target.classList.toggle("fa-eye");
+        e.target.classList.toggle("fa-eye-slash");
+    });
+    $("modal-provider-key").addEventListener("click", (e) => {
+        if (e.target === $("modal-provider-key")) closeProviderKeyModal();
+    });
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && !$("modal-provider-key").classList.contains("hidden")) {
+            closeProviderKeyModal();
+        }
+    });
 
     const fileDropZone = $("publish-file-section");
     if (fileDropZone) {
