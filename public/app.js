@@ -1452,15 +1452,19 @@ async function performPublish() {
 
         // Sauvegarde pour la page « Published Tracks »
         // audioUrl : version locale téléchargée par le serveur si possible
-        savePublishedTrack({
-            title: getManualSongTitle() || ($("gen-theme") ? $("gen-theme").value.trim() : "") || "Track publié",
-            audioUrl: data.audioUrl || (currentPublishMode === PUBLISH_MODE.LINK ? $("publish-link-input").value.trim() : ""),
-            coverUrl: data.coverUrl || "/covers/cover_of_the_day.png",
-            videoUrl: data.videoUrl || null,
-            stylePrompt: state.stylePrompt.trim(),
-            artistUsed: getSelectedArtistName(),
-            blocks: state.blocks
-        });
+        try {
+            savePublishedTrack({
+                title: getManualSongTitle() || ($("gen-theme") ? $("gen-theme").value.trim() : "") || "Track publié",
+                audioUrl: data.audioUrl || (currentPublishMode === PUBLISH_MODE.LINK ? $("publish-link-input").value.trim() : ""),
+                coverUrl: data.coverUrl || "/covers/cover_of_the_day.png",
+                videoUrl: data.videoUrl || null,
+                stylePrompt: state.stylePrompt.trim(),
+                artistUsed: getSelectedArtistName(),
+                blocks: state.blocks
+            });
+        } catch (saveErr) {
+            console.warn("[Published] Non-fatal save error:", saveErr.message);
+        }
     } catch (err) {
         console.error("[Upload & Publier] Erreur réseau/inattendue :", err);
         resetPublishProgress();
