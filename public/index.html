@@ -544,6 +544,19 @@
                 <p class="text-xs text-slate-500 mt-1.5"><i class="fa-solid fa-circle-info mr-1"></i>Prérempli par l'IA et modifiable librement. Le lien d'écoute est ajouté automatiquement.</p>
             </div>
 
+            <!-- Barre de progression de la publication (étape par étape) -->
+            <div id="publish-progress" class="hidden mt-4">
+                <div class="flex items-center justify-between mb-1.5">
+                    <span id="publish-progress-step" class="text-sm font-medium text-slate-200">Préparation…</span>
+                    <span id="publish-progress-pct" class="text-xs font-mono font-bold text-orange-400">0 %</span>
+                </div>
+                <div class="h-2.5 w-full rounded-full bg-purple-950/80 border border-purple-800/50 overflow-hidden">
+                    <div id="publish-progress-bar"
+                         class="h-full w-0 rounded-full bg-gradient-to-r from-purple-500 via-fuchsia-500 to-orange-400 transition-all duration-700 ease-out"></div>
+                </div>
+                <p id="publish-progress-detail" class="mt-1.5 text-xs text-slate-500 min-h-[1rem]"></p>
+            </div>
+
             <!-- Zone de statut / résultat -->
             <div id="publish-status" class="hidden mt-4 rounded-xl border p-4 text-sm"></div>
 

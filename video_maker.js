@@ -23,20 +23,62 @@ function getFfmpegPath() {
 }
 
 /**
+ * Mesure la durée réelle d'un fichier audio sans le décoder entièrement :
+ * lance ffmpeg en simple lecture d'en-tête (-i sans sortie) et parse la ligne
+ * « Duration: HH:MM:SS.xx » émise sur stderr.
+ * @param {string} audioPath
+ * @returns {Promise<number|null>} durée en secondes, ou null si indéterminée
+ */
+function getAudioDuration(audioPath) {
+    return new Promise((resolve) => {
+        if (!audioPath || !fs.existsSync(audioPath)) return resolve(null);
+        const ff = spawn(getFfmpegPath(), ["-hide_banner", "-i", audioPath], { windowsHide: true });
+        let stderr = "";
+        ff.stderr.on("data", (d) => { stderr += d.toString(); });
+        let settled = false;
+        const finish = () => {
+            if (settled) return;
+            settled = true;
+            const m = stderr.match(/Duration:\s*(\d+):(\d{1,2}):(\d+(?:\.\d+)?)/);
+            if (!m) return resolve(null);
+            const seconds = (+m[1]) * 3600 + (+m[2]) * 60 + parseFloat(m[3]);
+            resolve(Number.isFinite(seconds) && seconds > 0 ? seconds : null);
+        };
+        ff.on("error", finish);   // binaire absent / introuvable
+        ff.on("close", finish);   // ffmpeg quitte immédiatement (aucune sortie demandée)
+        const t = setTimeout(finish, 8000);
+        if (t.unref) t.unref();
+    });
+}
+
+/**
  * Génère une vidéo verticale 1080x1920 (pochette + audio) pour Reels Instagram.
  * @param {object} opts
  * @param {string} opts.imagePath  chemin de la pochette (png/jpg)
  * @param {string} opts.audioPath  chemin du fichier audio (mp3/wav/m4a…)
  * @param {string} [opts.outPath]  chemin MP4 de sortie (défaut : tmp)
  * @param {number} [opts.duration] durée max en secondes (défaut VIDEO_MAX_DURATION=60)
+ * @param {boolean} [opts.fullSong] true = la vidéo couvre la MUSIQUE ENTIÈRE
+ *                  (la durée réelle du fichier borne `duration`). Pour Facebook.
  * @returns {Promise<{path:string, duration:number}>}
  */
-function createCoverVideo({ imagePath, audioPath, outPath, duration }) {
+async function createCoverVideo({ imagePath, audioPath, outPath, duration, fullSong }) {
     // Instagram Reels : durée max 90 s (Meta). Le caller contrôle la durée :
     // - défaut / IG : 60 s (sous la limite rupload ~6-7 Mo en requête unique).
-    // - Facebook    : passer une valeur grande (ex VIDEO_MAX_DURATION_FULL) pour
-    //   publier la chanson entière (FB n'a pas de plafond à 60 s).
-    const maxDuration = Number(duration || process.env.VIDEO_MAX_DURATION || 60);
+    // - Facebook    : fullSong=true + une borne grande (ex VIDEO_MAX_DURATION_FULL)
+    //   -> la chanson complète est publiée (FB n'a pas de plafond à 60 s).
+    let maxDuration = Number(duration || process.env.VIDEO_MAX_DURATION || 60);
+
+    if (fullSong) {
+        // On mesure la chanson afin de ne pas produire plusieurs minutes de
+        // vidéo figée quand elle est plus courte que la borne demandée.
+        // Sans mesure fiable, -shortest garantit déjà l'arrêt à la fin de l'audio.
+        const real = await getAudioDuration(audioPath);
+        if (real && real > 0) {
+            maxDuration = Math.min(real + 1, maxDuration);
+            console.log(`⏱️ [VIDEO] Chanson détectée : ${real.toFixed(1)} s -> clip complet ≈ ${maxDuration.toFixed(1)} s`);
+        }
+    }
 
     if (!fs.existsSync(imagePath)) return Promise.reject(new Error("Pochette introuvable : " + imagePath));
     if (!fs.existsSync(audioPath)) return Promise.reject(new Error("Audio introuvable : " + audioPath));
@@ -100,4 +142,4 @@ function createCoverVideo({ imagePath, audioPath, outPath, duration }) {
     });
 }
 
-module.exports = { createCoverVideo, getFfmpegPath };
+module.exports = { createCoverVideo, getAudioDuration, getFfmpegPath };

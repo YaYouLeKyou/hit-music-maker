@@ -68,10 +68,14 @@ function buildCaption(hit) {
         lines.push("🎧 Écoutez la chanson complète : " + hit.music.audioUrl);
     }
 
-    // Extrait des paroles : privilégie le refrain, sinon début des paroles
+    // Extrait des paroles : privilégie le refrain, sinon début des paroles.
+    // Regex multilingue : Refrain (FR) / Chorus (EN) / Coro (ES) selon la
+    // langue d'écriture imposée par l'artiste de référence.
     let excerpt = "";
     if (Array.isArray(hit.blocks) && hit.blocks.length) {
-        const refrain = hit.blocks.find((b) => /refrain/i.test(b.type) && b.text.trim());
+        const refrain = hit.blocks.find(
+            (b) => /(refrain|chorus|coro)/i.test(b.type) && b.text.trim()
+        );
         const source = refrain || hit.blocks.find((b) => b.text.trim());
         if (source) excerpt = "[" + source.type + "]" + NL + source.text.trim();
     }
@@ -464,22 +468,42 @@ async function finalizeInstagramReel(creationId) {
  *   En cas d'échec vidéo, repli automatique sur le flux photo/texte.
  * - Chaque plateforme échoue indépendamment (non bloquant).
  * Retourne { facebook: {...}|null, instagram: {...}|null }.
+ *
+ * @param {object} hit   données du hit (coverPath, videoPath, customCaption…)
+ * @param {(platform:string, pct:number, message:string)=>void} [onEvent]
+ *        canal optionnel de progression : appelé à chaque étape plateforme
+ *        pour alimenter la barre de téléchargement côté navigateur (SSE).
  */
-async function publishToAllSocial(hit) {
+async function publishToAllSocial(hit, onEvent) {
     // Texte du post rédigé dans la modale (prérempli par l'IA, modifiable),
     // sinon légende standard générée par buildCaption().
     const caption = (hit.customCaption && String(hit.customCaption).trim()) || buildCaption(hit);
     const results = { facebook: null, instagram: null };
+
+    /**
+     * Relais d'étape vers le front (barre de progression SSE). Aucune erreur
+     * du canal de progression ne doit jamais interrompre la publication.
+     */
+    function step(platform, pct, message) {
+        console.log("📣 [SOCIAL][" + platform + "] (" + pct + "%) " + message);
+        if (typeof onEvent !== "function") return;
+        try { onEvent(platform, pct, message); } catch (e) { /* canal mort : ignoré */ }
+    }
+
     const hasVideo = !!(hit.videoPath || hit.videoUrl);
 
     if (hasVideo) {
         console.log("🎬 [SOCIAL] Vidéo disponible — publication en mode vidéo/Reel.");
 
-        // --- Facebook : vidéo ---
+        // --- Facebook : vidéo (musique complète) ---
+        step("facebook", 72, "Envoi de la vidéo COMPLETE sur Facebook (musique entière + pochette)…");
         try {
             results.facebook = await publishFacebookVideo(hit, hit.videoPathFull || hit.videoPath || hit.videoUrl, caption);
+            step("facebook", 80, "Facebook : vidéo avec la chanson complète publiée ✅");
         } catch (err) {
+            results.facebookError = err.message;
             console.error("❌ [SOCIAL] Échec publication vidéo Facebook : " + err.message);
+            step("facebook", 80, "Facebook : échec de la vidéo — " + err.message);
         }
 
         // --- Instagram : Reel en 2 étapes ---
@@ -488,6 +512,7 @@ async function publishToAllSocial(hit) {
         // Étape 2 (front) : polling /api/instagram/finalize jusqu'à publication.
         let reelCreationId = null;
         try {
+            step("instagram", 82, "Instagram : création du Reel avec l'extrait de 60 s…");
             const reelUrl = (results.facebook && results.facebook.sourceUrl) || hit.videoUrl || null;
             const container = await createInstagramReelContainer(
                 hit,
@@ -497,10 +522,12 @@ async function publishToAllSocial(hit) {
             );
             reelCreationId = container.creationId;
             results.instagramPendingCreationId = reelCreationId;
+            step("instagram", 90, "Instagram : Meta traite votre Reel — finalisation automatique en cours…");
             console.log(`📦 [SOCIAL] Reel Instagram en traitement (${reelCreationId}) — la publication sera finalisée par le client.`);
         } catch (err) {
             results.instagramError = err.message;
             console.error("❌ [SOCIAL] Échec création Reel Instagram : " + err.message);
+            step("instagram", 90, "Instagram : échec du Reel — tentative via la pochette…");
         }
 
         // FB vidéo OK et conteneur IG créé -> le front finalise l'Instagram
@@ -513,7 +540,9 @@ async function publishToAllSocial(hit) {
     // --- Flux photo/texte (fallback) ---
     if (!results.facebook) {
         try {
+            if (onEvent) onEvent("facebook", 80, "Facebook : envoi de la publication…");
             results.facebook = await publishFacebook(hit, caption);
+            if (onEvent) onEvent("facebook", 84, "Facebook publié ✓");
         } catch (err) {
             results.facebookError = err.message;
             console.error("❌ [SOCIAL] Échec publication Facebook :", err.message);
@@ -540,7 +569,9 @@ async function publishToAllSocial(hit) {
 
         if (igImageUrl) {
             try {
+                step("instagram", 86, "Instagram : envoi de la pochette + légende…");
                 results.instagram = await publishInstagram(hit, igImageUrl, caption);
+                if (onEvent) onEvent("instagram", 92, "Instagram publié ✓");
             } catch (err) {
                 results.instagramError = err.message;
                 console.error("❌ [SOCIAL] Échec publication Instagram :", err.message);

@@ -34,6 +34,7 @@ const fs = require("fs");
 const path = require("path");
 
 const { ARTISTS_DATABASE } = require("./public/artistes_presets.js");
+const { buildLyricsLanguageBlock, normalizeBlockTypes } = require("./lyrics_language.js");
 const { publishToAllSocial } = require("./social_publisher.js");
 const { generateFallbackCover } = require("./cover_fallback.js");
 
@@ -90,6 +91,13 @@ function printSecretsReminder() {
 function buildSystemPrompt(artist) {
     const artistName = artist.name;
 
+    // Langue d'écriture des paroles : déduite du champ "language" de la BDD.
+    // En mode Auto, l'artiste tiré au hasard impose sa langue : anglophone ->
+    // paroles 100% en anglais ; hispanophone -> 100% en espagnol ;
+    // francophone -> français (comportement historique).
+    const langBlock = buildLyricsLanguageBlock(artist);
+    const langCfg = langBlock.config;
+
     return [
         "Tu es un Directeur Artistique, Parolier et Producteur Audio d'élite.",
         "Ton rôle est de générer la structure complète et les paroles d'une chanson à succès.",
@@ -108,13 +116,16 @@ function buildSystemPrompt(artist) {
         "- Genre : " + artist.genre,
         "- Plage BPM : " + artist.bpm_range,
         "- Instruments : " + artist.instruments,
+        "- Langue native (BDD) : " + (artist.language || "Non renseignée"),
         "- Diction & Flow : " + artist.flow_signature,
         "- Preset Audio : " + artist.prompt_audio_preset,
         "",
+        ...langBlock.lines,
+        "",
         "INSTRUCTIONS STRICTES :",
         "1. PAROLES & MÉTRIQUE : Écris des paroles profondes avec une vraie poésie moderne.",
-        "   Respecte la Flow Signature de " + artistName + ". Inclus des balises [Intro], [Couplet 1],",
-        "   [Pré-refrain], [Refrain], [Couplet 2], [Pont], [Outro] et des annotations (Ad-libs, chœurs).",
+        "   Respecte la Flow Signature de " + artistName + ". Inclus des balises " + langCfg.structuralTags,
+        "   et des annotations (" + langCfg.adlibs + ").",
         "2. STYLE PROMPT (SUNO/UDIO) : Génère un prompt audio en ANGLAIS précis incluant genre,",
         "   BPM exact, instrumentation et texture vocale.",
         "3. IMAGE PROMPT (POCHETTE D'ALBUM) : Génère un prompt visuel en ANGLAIS, très descriptif",
@@ -124,15 +135,12 @@ function buildSystemPrompt(artist) {
         "",
         "Réponds STRICTEMENT sous forme d'objet JSON valide (sans texte hors du JSON) :",
         "{",
-        '  "generatedTheme": "Titre/Résumé du thème profond généré",',
+        '  "generatedTheme": "Titre/Résumé du thème profond généré, rédigé en ' + langCfg.themeWord + '",',
         '  "artistUsed": "' + artistName + '",',
         '  "stylePrompt": "Prompt audio en anglais pour Suno",',
         '  "imagePrompt": "Detailed cinematic 8k album cover art, dark aesthetic, moody lighting, highly detailed...",',
         '  "blocks": [',
-        '    { "type": "Intro", "text": "paroles..." },',
-        '    { "type": "Couplet 1", "text": "paroles..." },',
-        '    { "type": "Refrain", "text": "paroles..." },',
-        '    { "type": "Outro", "text": "paroles..." }',
+        ...langCfg.exampleBlocks,
         "  ]",
         "}"
     ].join(NL);
@@ -262,14 +270,20 @@ async function generateDailyHit() {
         artistUsed: typeof parsed.artistUsed === "string" && parsed.artistUsed ? parsed.artistUsed : artist.name,
         stylePrompt: typeof parsed.stylePrompt === "string" ? parsed.stylePrompt : "",
         imagePrompt: typeof parsed.imagePrompt === "string" ? parsed.imagePrompt : "",
-        blocks: Array.isArray(parsed.blocks)
-            ? parsed.blocks
-                .filter((b) => b && typeof b === "object")
-                .map((b) => ({
-                    type: typeof b.type === "string" ? b.type : "Couplet",
-                    text: typeof b.text === "string" ? b.text : ""
-                }))
-            : [],
+        // Harmonisation des titres de sections avec la langue imposée
+        // par l'artiste de référence (le modèle peut étiqueter les blocs
+        // en français même quand il écrit en anglais ou en espagnol).
+        blocks: normalizeBlockTypes(
+            Array.isArray(parsed.blocks)
+                ? parsed.blocks
+                    .filter((b) => b && typeof b === "object")
+                    .map((b) => ({
+                        type: typeof b.type === "string" ? b.type : "Couplet",
+                        text: typeof b.text === "string" ? b.text : ""
+                    }))
+                : [],
+            artist
+        ),
         lyrics: "",
         coverPath: null
     };

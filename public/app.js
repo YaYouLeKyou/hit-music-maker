@@ -802,14 +802,17 @@ async function publishToSocialMedia(audioUrl) {
             audioUrl: audioUrl
         };
 
-        const res = await fetch("/api/publish", {
+        // Barre de progression : initialisation puis consommation du flux
+        // NDJSON du serveur (/api/publish?progress=1) qui décrit chaque étape
+        // (recherche cover, vidéo complète FB, clip Reel 60s IG, uploads…).
+        publishProgressBar(0, "Préparation de la publication Facebook & Instagram…");
+
+        const res = await fetch("/api/publish?progress=1", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload)
         });
-
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Échec de la publication");
+        const data = await consumePublishProgressStream(res);
 
         const facebook = data.facebook ? "✅ Facebook" : "⚠️ Facebook";
         const instagram = data.instagram ? "✅ Instagram" : "⚠️ Instagram";
@@ -828,6 +831,7 @@ async function publishToSocialMedia(audioUrl) {
         });
     } catch (err) {
         console.error("Publication échouée :", err);
+        resetPublishProgress();
         toast("⚠️ Publication partielle : " + err.message, "warning");
     }
 }
@@ -847,6 +851,176 @@ function savePublishedTrack(trackData) {
     } catch (e) {
         console.error("Erreur sauvegarde track publié :", e);
     }
+}
+
+// ============================================================
+// BARRE DE PROGRESSION DE PUBLICATION (étape par étape)
+// ============================================================
+
+/** Dernier pourcentage connu : garde la barre affichée entre deux messages d'état. */
+let _activePublishPercent = null;
+
+/** Libellés lisibles par étape envoyée par le back-end (champ `step`/`platform`). */
+const PUBLISH_STEP_LABELS = {
+    audio: "🎵 Audio",
+    cover: "🎨 Pochette",
+    video: "🎬 Vidéo",
+    social: "📲 Publication",
+    facebook: "📘 Facebook",
+    instagram: "📸 Instagram"
+};
+
+/**
+ * Affiche et met à jour la barre de progression détaillée (#publish-progress)
+ * dans la modale, étape par étape. Appelée par consumePublishProgressStream()
+ * à chaque événement du serveur ; le pourcentage persiste tant qu'un nouveau
+ * n'arrive pas (les messages intermédiaires sans pourcentage gardent la valeur
+ * précédente).
+ * @param {number|string} percent 0..100
+ * @param {string} [message] description de l'étape en cours
+ * @param {object} [info] { step?, platform?, state? } détail de l'étape (active/done/warning)
+ */
+function publishProgressBar(percent, message, info) {
+    const pct = Math.max(0, Math.min(100, Math.round(Number(percent) || 0)));
+    _activePublishPercent = pct;
+
+    const wrap = $("publish-progress");
+    const bar = $("publish-progress-bar");
+    const pctEl = $("publish-progress-pct");
+    const stepEl = $("publish-progress-step");
+    const detailEl = $("publish-progress-detail");
+
+    if (!wrap || !bar) {
+        // Sécurité : éléments absents (ancien markup) -> repli sur la zone texte.
+        setPublishStatus({ type: "info", html: message || "Publication en cours…" });
+        return;
+    }
+
+    wrap.classList.remove("hidden");
+    bar.style.width = pct + "%";
+    if (pctEl) pctEl.textContent = pct + " %";
+    if (stepEl && message) stepEl.textContent = message;
+
+    if (detailEl) {
+        const key = (info && (info.platform || info.step)) || "";
+        const label = PUBLISH_STEP_LABELS[key] || "";
+        const state = (info && info.state) || "";
+        const stateSuffix =
+            state === "done" ? " — terminé ✓" :
+            state === "warning" ? " — avec avertissement ⚠️" :
+            state === "active" ? " — en cours…" : "";
+        detailEl.textContent = label ? label + stateSuffix : "";
+    }
+
+    setPublishStatus({ type: "info", html: message || "Publication en cours…" });
+}
+
+/** Masque et réinitialise la barre de progression de publication. */
+function resetPublishProgress() {
+    _activePublishPercent = null;
+    const wrap = $("publish-progress");
+    if (wrap) wrap.classList.add("hidden");
+    const bar = $("publish-progress-bar");
+    if (bar) bar.style.width = "0%";
+    const pctEl = $("publish-progress-pct");
+    if (pctEl) pctEl.textContent = "0 %";
+    const stepEl = $("publish-progress-step");
+    if (stepEl) stepEl.textContent = "Préparation…";
+    const detailEl = $("publish-progress-detail");
+    if (detailEl) detailEl.textContent = "";
+}
+
+/**
+ * Consomme le flux NDJSON renvoyé par POST /api/publish?progress=1.
+ * Format d'une ligne = un événement JSON :
+ *   { type:"start"|"step"|"info"|"heartbeat"|"done"|"error",
+ *     percent: number, message: string, ...payloadFinal }
+ * - Chaque événement met à jour la barre + le libellé en direct.
+ * - "heartbeat" (ligne vide/commentaire) est ignoré silencieusement.
+ * - "error" → lève une exception (gérée par le try/catch appelant).
+ * - Renvoie le payload final (identique à l'ancienne réponse JSON unique).
+ * Fallbacks conservés : si le serveur répond en JSON simple (ancien
+ * comportement / erreurs plateforme comme 413/504), on reproduit les
+ * messages historiques pour l'utilisateur.
+ * @param {Response} res réponse fetch de /api/publish?progress=1
+ * @returns {Promise<object>} payload final de publication
+ */
+async function consumePublishProgressStream(res) {
+    const contentType = res.headers.get("content-type") || "";
+
+    // --- Erreurs renvoyées hors du flux (limite plateforme, proxy…) ---
+    if (!res.ok && !contentType.includes("x-ndjson")) {
+        if (res.status === 413) {
+            throw new Error("Fichier trop volumineux : la limite d'envoi direct est de 4,5 Mo sur Vercel. " +
+                "Utilisez un fichier MP3 plus léger ou le mode « Lien » avec une URL MP3 directe.");
+        }
+        if (res.status === 504) {
+            throw new Error("Le serveur a mis trop de temps à répondre (timeout). " +
+                "Sur Vercel gratuit, la limite est de 60 s. " +
+                "Essayez un fichier MP3 plus court, désactivez la génération vidéo, " +
+                "ou passez sur un plan Vercel avec maxDuration >= 300 s. " +
+                "Votre MP3 reste intact — vous pouvez relancer.");
+        }
+        let msg = "";
+        try { msg = (await res.json()).error || ""; } catch { /* corps non JSON */ }
+        if (!msg) { try { msg = (await res.text()).slice(0, 300); } catch { /* ignore */ } }
+        throw new Error(msg || `Réponse serveur illisible (HTTP ${res.status})`);
+    }
+
+    // --- Fallback : réponse JSON simple (mode non-stream) ---
+    if (!contentType.includes("x-ndjson")) {
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || `Échec de la publication (HTTP ${res.status})`);
+        return json;
+    }
+
+    // --- Lecture ligne à ligne du flux NDJSON ---
+    publishProgressBar(1, "Connexion au serveur… Publication lancée…");
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let last = null;
+
+    while (true) {
+        let chunk;
+        try {
+            chunk = await reader.read();
+        } catch (err) {
+            throw new Error("Flux interrompu pendant la publication : " + (err.message || err));
+        }
+        if (chunk.done) break;
+
+        buffer += decoder.decode(chunk.value, { stream: true });
+        const lines = buffer.split(String.fromCharCode(10));
+        buffer = lines.pop(); // dernière ligne possiblement incomplète -> retenue
+
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith(":")) continue; // heartbeat SSE-style
+            let evt = null;
+            try { evt = JSON.parse(trimmed); } catch { continue; }
+            last = evt;
+            if (evt.message) {
+                publishProgressBar(evt.percent, evt.message, {
+                    step: evt.step,
+                    platform: evt.platform,
+                    state: evt.state
+                });
+            }
+        }
+    }
+
+    if (!last) {
+        resetPublishProgress();
+        throw new Error("Aucune réponse du serveur pendant la publication.");
+    }
+
+    if (last.type === "error") {
+        resetPublishProgress();
+        throw new Error(last.error || last.message || "Publication échouée.");
+    }
+    return last;
 }
 
 function extractArtistFromStyle(style) {
@@ -921,6 +1095,7 @@ function resetPublishForm() {
     if ($("publish-caption")) $("publish-caption").value = "";
     setPublishMode(PUBLISH_MODE.LINK);
     setPublishStatus(null);
+    resetPublishProgress();
     setPublishButtonState(false);
 }
 
@@ -1247,25 +1422,15 @@ async function performPublish() {
 
         setPublishStatus({ type: "info", html: "Traitement en cours sur le serveur : génération pochette, encodage vidéo, publication Facebook & Instagram…<br><span class='text-xs opacity-75'>Cela peut prendre 1 à 3 minutes selon la taille du fichier. Ne fermez pas cette fenêtre.</span>" });
 
-        const res = await fetch("/api/publish", { method: "POST", body: sendBody });
-        let data;
-        try {
-            data = await res.json();
-        } catch {
-            if (res.status === 413) {
-                throw new Error("Fichier trop volumineux : la limite d'envoi direct est de 4,5 Mo sur Vercel. " +
-                    "Utilisez un fichier MP3 plus léger ou le mode « Lien » avec une URL MP3 directe.");
-            }
-            if (res.status === 504) {
-                throw new Error("Le serveur a mis trop de temps à répondre (timeout). " +
-                    "Sur Vercel gratuit, la limite est de 60 s. " +
-                    "Essayez un fichier MP3 plus court, désactivez la génération vidéo, " +
-                    "ou passez sur un plan Vercel avec maxDuration >= 300 s. " +
-                    "Votre MP3 reste intact — vous pouvez relancer.");
-            }
-            throw new Error(`Réponse serveur illisible (HTTP ${res.status})`);
-        }
-        console.log("[Upload & Publier] Réponse serveur :", res.status, data);
+        const res = await fetch("/api/publish?progress=1", { method: "POST", body: sendBody });
+
+        // Barre de progression « étape par étape » : le serveur répond en flux
+        // NDJSON ; chaque événement met à jour la barre + le texte d'état en
+        // temps réel et le payload final remplace l'ancienne réponse JSON.
+        publishProgressBar(0, "Envoi des données au serveur…");
+        const data = await consumePublishProgressStream(res);
+
+        console.log("[Upload & Publier] Publication terminée :", data);
 
         if (!res.ok) {
             const detailLines = [];
@@ -1279,6 +1444,7 @@ async function performPublish() {
             }
             const html = detailLines.join("<br>") || `Erreur serveur (HTTP ${res.status})`;
             console.error("[Upload & Publier] Échec de la publication :", JSON.stringify(data, null, 2));
+            resetPublishProgress();
             setPublishStatus({ type: "error", html });
             toast(data.error || "Échec de la publication.", "error");
             return;
@@ -1323,6 +1489,7 @@ async function performPublish() {
         });
     } catch (err) {
         console.error("[Upload & Publier] Erreur réseau/inattendue :", err);
+        resetPublishProgress();
         setPublishStatus({
             type: "error",
             html: `<span class="font-bold">Échec de la publication.</span><br>${escapeHtml(err.message || "Erreur inconnue")}<br>

@@ -15,6 +15,7 @@ const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 
 const { ARTISTS_DATABASE } = require("./public/artistes_presets.js");
+const { buildLyricsLanguageBlock, normalizeBlockTypes } = require("./lyrics_language.js");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -235,6 +236,12 @@ const UDIO_MODEL = process.env.UDIO_MODEL || "chirp-v4-5";
 function buildSystemPrompt({ theme, artist, isAutoMode }) {
     const artistName = artist ? artist.name : "Artiste Polyvalent";
 
+    // Langue d'écriture des paroles : déduite du champ "language" de la BDD.
+    // Artiste anglophone -> paroles 100% en anglais ; hispanophone -> 100%
+    // en espagnol ; francophone (ou inconnu/hors BDD) -> français.
+    const langBlock = buildLyricsLanguageBlock(artist);
+    const langCfg = langBlock.config;
+
     let themeBlock;
     if (isAutoMode || !theme) {
         themeBlock = [
@@ -262,13 +269,16 @@ function buildSystemPrompt({ theme, artist, isAutoMode }) {
         "- Genre : " + (artist ? artist.genre : "Modern Rap / Trap"),
         "- Plage BPM : " + (artist ? artist.bpm_range : "120-130"),
         "- Instruments : " + (artist ? artist.instruments : "808, Piano, Synth"),
+        "- Langue native (BDD) : " + (artist && artist.language ? artist.language : "Non renseignée"),
         "- Diction & Flow : " + (artist ? artist.flow_signature : "Melodic, dynamic flow"),
         "- Preset Audio : " + (artist ? artist.prompt_audio_preset : "Modern production, polished mix"),
         "",
+        ...langBlock.lines,
+        "",
         "INSTRUCTIONS STRICTES :",
         "1. PAROLES & MÉTRIQUE : Écris des paroles profondes avec une vraie poésie moderne.",
-        "   Respecte la Flow Signature de " + artistName + ". Inclus des balises [Intro], [Couplet 1],",
-        "   [Pré-refrain], [Refrain], [Couplet 2], [Pont], [Outro] et des annotations (Ad-libs, chœurs).",
+        "   Respecte la Flow Signature de " + artistName + ". Inclus des balises " + langCfg.structuralTags,
+        "   et des annotations (" + langCfg.adlibs + ").",
         "2. STYLE PROMPT (SUNO/UDIO) : Génère un prompt audio en ANGLAIS précis incluant genre,",
         "   BPM exact, instrumentation et texture vocale.",
         "3. COVER PROMPT : Génère un prompt visuel en ANGLAIS décrivant l'ambiance, les couleurs,",
@@ -276,15 +286,12 @@ function buildSystemPrompt({ theme, artist, isAutoMode }) {
         "",
         "Réponds STRICTEMENT sous forme d'objet JSON valide (sans texte hors du JSON) :",
         "{",
-        '  "generatedTheme": "Titre/Résumé du thème profond généré",',
+        '  "generatedTheme": "Titre/Résumé du thème profond généré, rédigé en ' + langCfg.themeWord + '",',
         '  "artistUsed": "' + artistName + '",',
         '  "stylePrompt": "Prompt audio en anglais pour Suno",',
         '  "coverPrompt": "Prompt visuel en anglais pour la pochette d\'album",',
         '  "blocks": [',
-        '    { "type": "Intro", "text": "paroles..." },',
-        '    { "type": "Couplet 1", "text": "paroles..." },',
-        '    { "type": "Refrain", "text": "paroles..." },',
-        '    { "type": "Outro", "text": "paroles..." }',
+        ...langCfg.exampleBlocks,
         "  ]",
         "}"
     ].join("\n");
@@ -328,6 +335,11 @@ app.post("/api/generate", async (req, res) => {
                 bpm_range: "90-140",
                 instruments: "au choix cohérent avec l'univers de l'artiste",
                 flow_signature: "signature propre à cet artiste",
+                // Origine inconnue : comportement historique = paroles en français.
+                // Passer plutôt par la BDD (public/artistes_presets.js) pour un
+                // artiste anglophone ou hispanophone : la langue des paroles suit
+                // alors automatiquement son champ "language".
+                language: "Français",
                 prompt_audio_preset: "modern production, polished mix"
             };
         }
@@ -427,14 +439,20 @@ app.post("/api/generate", async (req, res) => {
                 : (artist ? artist.name : ""),
             stylePrompt: typeof parsed.stylePrompt === "string" ? parsed.stylePrompt : "",
             coverPrompt: typeof parsed.coverPrompt === "string" ? parsed.coverPrompt : "",
-            blocks: Array.isArray(parsed.blocks)
-                ? parsed.blocks
-                    .filter((b) => b && typeof b === "object")
-                    .map((b) => ({
-                        type: typeof b.type === "string" ? b.type : "Couplet",
-                        text: typeof b.text === "string" ? b.text : ""
-                    }))
-                : []
+            blocks: (() => {
+                // Nettoyage individuel des blocs renvoyés par le modèle…
+                const clean = Array.isArray(parsed.blocks)
+                    ? parsed.blocks
+                        .filter((b) => b && typeof b === "object")
+                        .map((b) => ({
+                            type: typeof b.type === "string" ? b.type : "Couplet",
+                            text: typeof b.text === "string" ? b.text : ""
+                        }))
+                    : [];
+                // …puis harmonisation des titres de sections avec la langue
+                // imposée par l'artiste de référence (anglais/espagnol/français).
+                return normalizeBlockTypes(clean, artist);
+            })()
         };
 
         res.json(result);
@@ -1249,6 +1267,81 @@ app.post("/api/publish", upload.single('file'), async (req, res) => {
     const social = require('./social_publisher.js');
     const { generateFallbackCover } = require('./cover_fallback.js');
 
+    // ============================================================
+    // PROGRESSION TEMPS RÉEL (barre de téléchargement côté navigateur)
+    // ------------------------------------------------------------
+    // Le front active ce mode avec l'en-tête « X-Publish-Stream: 1 ».
+    // La réponse devient un flux NDJSON : chaque ligne est un événement
+    // JSON { type:"progress"|"warning"|"ping"|"error"|"done", ... }.
+    // Sans cet en-tête, comportement historique (réponse JSON unique)
+    // préservé pour les anciens clients et les tests automatisés.
+    // ============================================================
+    let streamStarted = false;
+    let pingTimer = null;
+
+    /** Bascule la réponse en flux NDJSON (une seule fois, avant tout write). */
+    function startProgressStream() {
+        if (!streamMode() || streamStarted) return;
+        streamStarted = true;
+        res.status(200);
+        res.setHeader("Content-Type", "application/x-ndjson; charset=utf-8");
+        res.setHeader("Cache-Control", "no-cache, no-transform");
+        res.setHeader("X-Accel-Buffering", "no");
+        if (typeof res.flushHeaders === "function") res.flushHeaders();
+        // Heartbeat : garde la connexion vivante pendant les longs encodages
+        // ffmpeg / uploads Meta (certains proxys coupent après ~30 s d'inactivité).
+        pingTimer = setInterval(() => emitEvent({ type: "ping", at: Date.now() }), 10000);
+        if (pingTimer.unref) pingTimer.unref();
+        console.log("[PUBLISH] Flux de progression NDJSON activé (X-Publish-Stream)");
+    }
+
+    function streamMode() {
+        return req.get("x-publish-stream") === "1";
+    }
+
+    function stopHeartbeat() {
+        if (pingTimer) { clearInterval(pingTimer); pingTimer = null; }
+    }
+
+    /** Écrit un événement dans le flux (sans effet hors mode streaming). */
+    function emitEvent(payload) {
+        if (!streamStarted) return;
+        try { res.write(JSON.stringify(payload) + "\n"); } catch { /* socket fermée */ }
+    }
+
+    /**
+     * Événement de progression standardisé.
+     * @param {number} percent  0-100
+     * @param {string} message  texte affiché à l'utilisateur
+     * @param {object} [extra]  { step?, state?, platform?, warning?, instagramPendingCreationId? }
+     */
+    function sendProgress(percent, message, extra) {
+        const evt = Object.assign(
+            { type: "progress", percent: Math.max(0, Math.min(100, Math.round(percent))), message },
+            extra || {}
+        );
+        emitEvent(evt);
+        if (streamStarted) console.log(`[PUBLISH][${evt.percent}%] ${message}`);
+    }
+
+    /**
+     * Termine la requête : événement final dans le flux NDJSON si le mode
+     * streaming est actif, sinon réponse JSON historique (tests/anciens clients).
+     */
+    function finishPublishResponse(statusCode, payload) {
+        if (!streamStarted) return res.status(statusCode).json(payload);
+        stopHeartbeat();
+        if (statusCode >= 400) {
+            emitEvent(Object.assign({ type: "error", percent: 100 }, payload));
+        } else {
+            emitEvent(Object.assign(
+                { type: "done", percent: 100, message: "Publication terminée ✓" },
+                payload
+            ));
+        }
+        res.end();
+    }
+
     try {
         // Get audio source
         // Sources acceptées : fichier téléversé (disque OU mémoire), URL Blob
@@ -1256,9 +1349,13 @@ app.post("/api/publish", upload.single('file'), async (req, res) => {
         const audioSource = req.file?.path || req.file?.buffer || req.body?.blobAudioUrl || req.body?.audioUrl;
         if (!audioSource) {
             console.error("[PUBLISH] No audio source provided");
-            return res.status(400).json({ error: "Aucune source audio fournie : renseignez un lien Suno/Udio ou téléversez un fichier MP3." });
+            // finishPublishResponse gère les deux modes (flux NDJSON / JSON historique).
+            return finishPublishResponse(400, { type: "error", error: "Aucune source audio fournie : renseignez un lien Suno/Udio ou téléversez un fichier MP3." });
         }
         console.log(`[PUBLISH] Audio source: ${audioSource}`);
+
+        startProgressStream();
+        sendProgress(5, "Réception de l'audio…", { step: "audio", state: "active" });
 
         // Extract metadata
         const {
@@ -1295,6 +1392,11 @@ app.post("/api/publish", upload.single('file'), async (req, res) => {
         } catch (audioErr) {
             console.warn("[PUBLISH] Audio non téléchargeable localement : " + audioErr.message);
         }
+        if (localAudioUrl) {
+            sendProgress(15, "Audio prêt ✓", { step: "audio", state: "done" });
+        } else {
+            sendProgress(15, "Audio conservé à distance (pas de copie locale)", { step: "audio", state: "warning" });
+        }
 
         // Génère la pochette : Stable Diffusion (HF) sinon fallback local.
         // La pochette est conservée EN MÉMOIRE (coverBuffer) pour l'upload
@@ -1304,6 +1406,7 @@ app.post("/api/publish", upload.single('file'), async (req, res) => {
         let coverPath = null;      // fichier (lecture ffmpeg / URL statique)
         let coverBuffer = null;    // mémoire (upload FB direct)
         let coverGenerated = false;
+        sendProgress(22, "Génération de la pochette IA (Stable Diffusion), puis secours local si besoin…", { step: "cover", state: "active" });
         try {
             if (typeof social.generateHFArtwork === "function" && process.env.HF_API_KEY) {
                 console.log("[PUBLISH] Génération pochette via Stable Diffusion (HF)");
@@ -1329,6 +1432,7 @@ app.post("/api/publish", upload.single('file'), async (req, res) => {
             }
             coverGenerated = true;
             console.log(`[PUBLISH] Cover prête : ${coverPath}`);
+            sendProgress(38, "Pochette prête ✓", { step: "cover", state: "done" });
         } catch (fbErr) {
             console.error("[PUBLISH] Pochette impossible :", fbErr.message);
             coverPath = null;
@@ -1380,31 +1484,40 @@ app.post("/api/publish", upload.single('file'), async (req, res) => {
                 const { createCoverVideo } = require("./video_maker.js");
                 const audioFile = path.join(PUBLIC_UPLOADS_DIR, path.basename(localAudioUrl));
                 // Reel Instagram : 60 s (défaut / limite rupload).
+                sendProgress(45, "Encodage vidéo Instagram : pochette + musique (60 s max)…", { step: "video", state: "active" });
                 const igResult = await createCoverVideo({
                     imagePath: coverPath,
                     audioPath: audioFile,
                     outPath: path.join(PUBLIC_UPLOADS_DIR, `video-${Date.now()}.mp4`)
                 });
                 videoPath = igResult.path;
+                sendProgress(58, "Vidéo Instagram prête ✓ (60 s)", { step: "video", state: "intermediate" });
                 // Facebook : vidéo complète uniquement hors serverless (Vercel free = 60s).
                 // Sur Vercel, on saute le rendu intégral pour éviter le timeout ;
                 // Facebook recevra le clip 60s (videoPath) en repli.
                 if (!IS_SERVERLESS) {
                     const fbDuration = Number(process.env.VIDEO_MAX_DURATION_FULL || 300);
+                    sendProgress(62, "Encodage vidéo Facebook : chanson complète en lecture…", { step: "video", state: "active" });
                     const fbResult = await createCoverVideo({
                         imagePath: coverPath,
                         audioPath: audioFile,
                         outPath: path.join(PUBLIC_UPLOADS_DIR, `video-full-${Date.now()}.mp4`),
-                        duration: fbDuration
+                        duration: fbDuration,
+                        fullSong: true
                     });
                     videoPathFull = fbResult.path;
+                    sendProgress(72, "Vidéo Facebook complète prête ✓", { step: "video", state: "done" });
                 }
             } catch (vidErr) {
                 console.warn("⚠️ [PUBLISH] Génération vidéo impossible — repli photo : " + vidErr.message);
+                sendProgress(72, "Encodage vidéo indisponible — repli sur la pochette seule.", { step: "video", state: "warning" });
             }
         }
 
-        // Publish to social platforms
+        // Publish to social platforms.
+        // Le 2e argument (onEvent) relaie vers la barre de progression les
+        // étapes Meta plateforme par plateforme (upload vidéo, conteneur Reel…).
+        sendProgress(76, "Publication en cours sur Facebook & Instagram…", { step: "social", state: "active" });
         const publishResult = await social.publishToAllSocial({
             artistUsed,
             generatedTheme: theme,
@@ -1418,6 +1531,10 @@ app.post("/api/publish", upload.single('file'), async (req, res) => {
             videoUrl: videoUrlFinal,
             coverPrompt,
             customCaption: typeof caption === "string" ? caption.trim() : ""
+        }, function onSocialEvent(platform, pct, message) {
+            if (platform === "facebook") sendProgress(pct, message, { step: "facebook", state: "active" });
+            else if (platform === "instagram") sendProgress(pct, message, { step: "instagram", state: "active" });
+            else sendProgress(pct, message);
         });
 
         const fbOk = !!publishResult.facebook;
@@ -1426,7 +1543,8 @@ app.post("/api/publish", upload.single('file'), async (req, res) => {
         if (!fbOk && !igOk) {
             console.error("[PUBLISH] Publication failed on every platform",
                 JSON.stringify({ facebookError: publishResult.facebookError, instagramError: publishResult.instagramError }));
-            return res.status(502).json({
+            return finishPublishResponse(502, {
+                type: "error",
                 error: "La publication a échoué sur toutes les plateformes.",
                 details: {
                     facebook: publishResult.facebookError || (publishResult.facebook === null ? "Non configurée (token/page manquant dans .env)" : null),
@@ -1454,8 +1572,11 @@ app.post("/api/publish", upload.single('file'), async (req, res) => {
         };
         savePublishedTrackToDisk(publishedTrack);
 
-        res.json({
+        // Réponse finale : done contient le track complet (id compris) pour que
+        // le front l'enregistre tel quel dans « Tracks publiés » / localStorage.
+        finishPublishResponse(200, {
             status: "SUCCESS",
+            publishedTrack,
             facebook: publishedTrack.facebook,
             instagram: publishedTrack.instagram,
             details: {
@@ -1472,7 +1593,7 @@ app.post("/api/publish", upload.single('file'), async (req, res) => {
 
     } catch (err) {
         console.error("[PUBLISH] Error:", err.message);
-        res.status(500).json({ error: err.message });
+        return finishPublishResponse(500, { error: err.message });
     }
 });
 
@@ -1504,3 +1625,7 @@ app.use((err, req, res, next) => {
 
 // Export pour le déploiement serverless (Vercel)
 module.exports = app;
+
+// Expose le générateur de prompt système pour les tests automatisés
+// (tests/test_lyrics_language.js) sans démarrer le serveur HTTP.
+module.exports.buildSystemPrompt = buildSystemPrompt;
