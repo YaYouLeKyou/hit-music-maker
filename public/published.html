@@ -426,6 +426,13 @@
                         <option value="international">International</option>
                     </select>
                 </div>
+                <div class="filter-group">
+                    <label for="owner-filter">Auteur :</label>
+                    <select id="owner-filter">
+                        <option value="">Toute la communauté</option>
+                        <option value="mine">🎤 Mes morceaux uniquement</option>
+                    </select>
+                </div>
                 <button id="clear-filters" class="btn-clear-filters" type="button" title="Réinitialiser les filtres">
                     <i class="fa-solid fa-rotate-left"></i> Réinitialiser
                 </button>
@@ -457,12 +464,24 @@
     </div>
 
     <script>
+        const LS_USER_ID = 'mhms_user_id';
+        function getUserId() {
+            try {
+                let uid = localStorage.getItem(LS_USER_ID);
+                if (!uid) {
+                    uid = 'user-' + Math.random().toString(36).slice(2, 10) + '-' + Date.now().toString(36).slice(-6);
+                    localStorage.setItem(LS_USER_ID, uid);
+                }
+                return uid;
+            } catch { return 'anon'; }
+        }
         document.addEventListener('DOMContentLoaded', async function() {
             const tracksContainer = document.getElementById('tracks-container');
             
             let publishedTracks = [];
             const styleFilter = document.getElementById('style-filter');
             const originFilter = document.getElementById('origin-filter');
+            const ownerFilter = document.getElementById('owner-filter');
             const clearBtn = document.getElementById('clear-filters');
 
             function escapeHtml(str) {
@@ -492,12 +511,15 @@
             function getFilteredTracks() {
                 const styleVal = styleFilter ? styleFilter.value.toLowerCase() : '';
                 const originVal = originFilter ? originFilter.value.toLowerCase() : '';
+                const ownerVal = ownerFilter ? ownerFilter.value : '';
+                const currentUserId = getUserId();
                 return publishedTracks.filter(track => {
                     const trackStyle = (track.style || '').toLowerCase();
                     const trackOrigin = (track.origin || '').toLowerCase();
                     const styleMatch = !styleVal || trackStyle.includes(styleVal);
                     const originMatch = !originVal || trackOrigin.includes(originVal);
-                    return styleMatch && originMatch;
+                    const ownerMatch = !ownerVal || (ownerVal === 'mine' && track.userId === currentUserId);
+                    return styleMatch && originMatch && ownerMatch;
                 });
             }
 
@@ -560,18 +582,22 @@
 
             renderTracks(publishedTracks);
 
+            if (clearBtn) {
+                clearBtn.addEventListener('click', () => {
+                    if (styleFilter) styleFilter.value = '';
+                    if (originFilter) originFilter.value = '';
+                    if (ownerFilter) ownerFilter.value = '';
+                    renderTracks(publishedTracks);
+                });
+            }
             if (styleFilter) {
                 styleFilter.addEventListener('change', () => renderTracks(getFilteredTracks()));
             }
             if (originFilter) {
                 originFilter.addEventListener('change', () => renderTracks(getFilteredTracks()));
             }
-            if (clearBtn) {
-                clearBtn.addEventListener('click', () => {
-                    if (styleFilter) styleFilter.value = '';
-                    if (originFilter) originFilter.value = '';
-                    renderTracks(publishedTracks);
-                });
+            if (ownerFilter) {
+                ownerFilter.addEventListener('change', () => renderTracks(getFilteredTracks()));
             }
 
             // Attache les événements après injection du HTML

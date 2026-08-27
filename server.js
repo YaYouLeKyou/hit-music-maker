@@ -124,8 +124,69 @@ const GROQ_MODEL = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
 
 // --- Configuration Gemini (fallback LLM quand Groq est en 429 / indisponible) ---
 const GEMINI_API_KEY = process.env.BANANA_API_KEY || process.env.GEMINI_API_KEY || "";
-const GEMINI_TEXT_MODEL = process.env.GEMINI_TEXT_MODEL || "gemini-3.6-flash";
+const GEMINI_TEXT_MODEL = process.env.GEMINI_TEXT_MODEL || "gemini-1.5-flash";
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
+
+// --- Configuration OpenRouter (multiples modèles gratuits) ---
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || "";
+const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
+
+// --- Configuration Together AI (modèles open-source gratuits) ---
+const TOGETHER_API_KEY = process.env.TOGETHER_API_KEY || "";
+const TOGETHER_API_URL = "https://api.together.xyz/v1/chat/completions";
+
+// --- Configuration Mistral AI ---
+const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY || "";
+const MISTRAL_API_URL = "https://api.mistral.ai/v1/chat/completions";
+
+// Mapping des providers AI disponibles avec leurs modèles gratuits
+const AI_PROVIDERS = {
+    groq: {
+        name: "Groq",
+        url: GROQ_API_URL,
+        defaultModel: GROQ_MODEL,
+        freeQuota: "~30 req/min, 6000 tokens/min",
+        apiKeyEnv: "GROQ_API_KEY",
+        docsUrl: "https://console.groq.com/keys",
+        format: "openai"
+    },
+    gemini: {
+        name: "Google Gemini",
+        url: GEMINI_API_BASE,
+        defaultModel: GEMINI_TEXT_MODEL,
+        freeQuota: "60 req/min, 1500 req/day",
+        apiKeyEnv: "GEMINI_API_KEY",
+        docsUrl: "https://makersuite.google.com/app/apikey",
+        format: "gemini"
+    },
+    openrouter: {
+        name: "OpenRouter",
+        url: OPENROUTER_API_URL,
+        defaultModel: "meta-llama/llama-3.1-8b-instruct:free",
+        freeQuota: "Modèles gratuits illimités (certains)",
+        apiKeyEnv: "OPENROUTER_API_KEY",
+        docsUrl: "https://openrouter.ai/keys",
+        format: "openai"
+    },
+    together: {
+        name: "Together AI",
+        url: TOGETHER_API_URL,
+        defaultModel: "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
+        freeQuota: "1M tokens gratuits à l'inscription",
+        apiKeyEnv: "TOGETHER_API_KEY",
+        docsUrl: "https://api.together.xyz/settings/api-keys",
+        format: "openai"
+    },
+    mistral: {
+        name: "Mistral AI",
+        url: MISTRAL_API_URL,
+        defaultModel: "mistral-small-latest",
+        freeQuota: "Gratuit avec quota journalier",
+        apiKeyEnv: "MISTRAL_API_KEY",
+        docsUrl: "https://console.mistral.ai/api-keys",
+        format: "openai"
+    }
+};
 
 // --- Configuration Stripe (« Publier en direct » : service payant) ---
 const STRIPE_ENABLED = !!process.env.STRIPE_SECRET_KEY;
@@ -243,26 +304,45 @@ function buildSystemPrompt({ theme, artist, isAutoMode }) {
     const langCfg = langBlock.config;
 
     let themeBlock;
+    let titleGuidance = "";
+    
     if (isAutoMode || !theme) {
         themeBlock = [
             "MODE CRÉATION AUTO & THÈMES PROFONDS :",
-            "- N'utilise PAS de thèmes génériques (fête, amour basique, argent).",
-            "- GÉNÈRE UN THÈME PROFOND, INTROSPECTIF ET MARQUANT. Exemples de directions :",
+            "- N'utilise PAS de thèmes génériques (fête, amour basique, argent, succès superficiel).",
+            "- GÉNÈRE UN THÈME PROFOND, INTROSPECTIF ET MARQUANT, ancré dans l'univers artistique de l'artiste.",
+            "- Le titre doit être poétique, évocateur et refléter parfaitement le thème choisi.",
+            "- Chaque thème doit raconter une histoire spécifique, émotionnellement résonnante.",
             "  * L'aliénation numérique et la quête de réel dans un monde saturé d'écrans.",
             "  * Le poids du succès, la solitude au sommet et la trahison des proches.",
             "  * La nostalgie de l'enfance face à la violence du passage à l'âge adulte.",
             "  * La dualité entre la lumière publique et l'obscurité intérieure.",
-            "  * L'héritage familial, les sacrifices invisibles des parents et la rédemption."
+            "  * L'héritage familial, les sacrifices invisibles des parents et la rédemption.",
+            "  * Les luttes intérieures derrière le masque de la célébrité.",
+            "  * La recherche d'authenticité dans un monde de performances constantes.",
+            "  * La tension entre vulnérabilité et force dans les relations humaines."
+        ].join("\n");
+        
+        titleGuidance = [
+            "DIRECTIVES SPÉCIFIQUES POUR LE TITRE :",
+            "- Crée un titre court et mémorable (1-5 mots) qui résume l'essence du thème.",
+            "- Le titre doit être poétique, intriguant et facile à retenir.",
+            "- Évite les titres génériques comme 'Love', 'Money', 'Party'.",
+            "- Privilégie les métaphores, les images fortes, les contrastes saisissants.",
+            "- Le titre doit donner envie d'écouter la chanson immédiatement."
         ].join("\n");
     } else {
         themeBlock = "- Thème imposé : " + theme;
+        titleGuidance = "- Titre à générer basé sur le thème imposé : " + theme;
     }
 
     return [
-        "Tu es un Directeur Artistique, Parolier et Producteur Audio d'élite.",
-        "Ton rôle est de générer la structure complète et les paroles d'une chanson à succès.",
+        "Tu es un Directeur Artistique, Parolier et Producteur Audio d'élite, spécialisé dans la création de hits profondément artistiques.",
+        "Ta mission est de générer une chanson complète avec un titre accrocheur, un thème profond et des paroles qui résonnent émotionnellement.",
         "",
         themeBlock,
+        "",
+        titleGuidance,
         "",
         "DONNÉES STUDIO DE L'ARTISTE CIBLE :",
         "- Nom : " + artistName,
@@ -283,6 +363,7 @@ function buildSystemPrompt({ theme, artist, isAutoMode }) {
         "   BPM exact, instrumentation et texture vocale.",
         "3. COVER PROMPT : Génère un prompt visuel en ANGLAIS décrivant l'ambiance, les couleurs,",
         "   le style artistique et l'atmosphère de la pochette d'album (ex: neon cityscape, dark synthwave...).",
+        "4. TITRE DE LA CHANSON : Génère un titre court, mémorable et poétique qui capture l'essence du thème.",
         "",
         "Réponds STRICTEMENT sous forme d'objet JSON valide (sans texte hors du JSON) :",
         "{",
@@ -299,21 +380,42 @@ function buildSystemPrompt({ theme, artist, isAutoMode }) {
 
 /**
  * Route POST /api/generate
- * Body attendu : { apiKey?, theme?, targetArtist?, isAutoMode? }
- * Relaye la requête vers Groq et renvoie { generatedTheme, artistUsed, stylePrompt, blocks }.
+ * Body attendu : { apiKey?, provider?, theme?, targetArtist?, isAutoMode?, userId? }
+ * Génère paroles/style via le provider AI sélectionné (Groq, Gemini, OpenRouter, TogetherAI, Mistral).
  */
 app.post("/api/generate", async (req, res) => {
     try {
-        const { apiKey: clientKey, theme, targetArtist, isAutoMode } = req.body || {};
+        const { apiKey: clientKey, provider, theme, targetArtist, isAutoMode, userId } = req.body || {};
 
         // Priorité à la clé du client (localStorage), sinon fallback sur le .env du serveur
         const apiKey = clientKey && typeof clientKey === "string" && clientKey.trim().length >= 10
             ? clientKey.trim()
-            : process.env.GROQ_API_KEY;
+            : undefined;
 
-        if (!apiKey || apiKey.trim().length < 10) {
+        // Vérifier au moins un provider configuré
+        const availableProviders = Object.keys(AI_PROVIDERS).filter(k => {
+            const config = AI_PROVIDERS[k];
+            return process.env[config.apiKeyEnv] || apiKey;
+        });
+        if (availableProviders.length === 0) {
             return res.status(400).json({
-                error: "Clé API Groq manquante ou invalide. Renseignez votre clé dans l'en-tête de l'application ou dans le fichier .env du serveur."
+                error: "Aucune clé API AI configurée. Renseignez une clé dans les paramètres de l'application."
+            });
+        }
+
+        const selectedProvider = provider || "groq";
+        const providerConfig = AI_PROVIDERS[selectedProvider];
+        if (!providerConfig) {
+            return res.status(400).json({
+                error: `Provider "${selectedProvider}" inconnu. Available: ${Object.keys(AI_PROVIDERS).join(", ")}`
+            });
+        }
+
+        // Vérifier si le provider a une clé configurée ou une clé client
+        const effectiveApiKey = apiKey || process.env[providerConfig.apiKeyEnv];
+        if (!effectiveApiKey || effectiveApiKey.trim().length < 10) {
+            return res.status(400).json({
+                error: `Clé API ${providerConfig.name} manquante. Ajoutez-la dans les paramètres de l'application ou configurez ${providerConfig.apiKeyEnv} sur le serveur.`
             });
         }
 
@@ -335,87 +437,35 @@ app.post("/api/generate", async (req, res) => {
                 bpm_range: "90-140",
                 instruments: "au choix cohérent avec l'univers de l'artiste",
                 flow_signature: "signature propre à cet artiste",
-                // Origine inconnue : comportement historique = paroles en français.
-                // Passer plutôt par la BDD (public/artistes_presets.js) pour un
-                // artiste anglophone ou hispanophone : la langue des paroles suit
-                // alors automatiquement son champ "language".
                 language: "Français",
                 prompt_audio_preset: "modern production, polished mix"
             };
         }
 
-        const systemPrompt = buildSystemPrompt({
-            theme: typeof theme === "string" ? theme.trim() : "",
-            artist,
-            isAutoMode: Boolean(isAutoMode)
-        });
-
-        const userContent = [
-            "Génère la chanson complète conformément aux instructions du système.",
-            "Réponds UNIQUEMENT avec l'objet JSON valide, sans texte autour, sans balises markdown."
-        ].join("\n");
-
         let rawContent = null;
         let usedFallback = false;
 
-        const groqResponse = await fetch(GROQ_API_URL, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${apiKey}`
-            },
-            body: JSON.stringify({
-                model: GROQ_MODEL,
-                temperature: 0.9,
-                max_tokens: 4096,
-                messages: [
-                    { role: "system", content: systemPrompt },
-                    { role: "user", content: userContent }
-                ]
-            })
-        });
-
-        if (!groqResponse.ok) {
-            let detail = "";
-            try {
-                const errBody = await groqResponse.json();
-                detail = errBody?.error?.message || JSON.stringify(errBody);
-            } catch (_) {
-                detail = await groqResponse.text().catch(() => "");
-            }
-
-            const isRateLimit = groqResponse.status === 429;
-            if (isRateLimit && GEMINI_API_KEY) {
-                console.warn(`[generate] Groq rate limit (429) — bascule vers Gemini : ${detail}`);
+        try {
+            rawContent = await callAIProvider({
+                theme: typeof theme === "string" ? theme.trim() : "",
+                artist,
+                isAutoMode: Boolean(isAutoMode),
+                provider: selectedProvider,
+                apiKey: effectiveApiKey
+            });
+        } catch (providerErr) {
+            console.warn(`[generate] Provider ${selectedProvider} échoué :`, providerErr.message);
+            // Fallback vers Gemini si disponible et que ce n'est pas déjà Gemini
+            if (providerConfig.name !== "Google Gemini" && GEMINI_API_KEY) {
+                console.warn(`[generate] Fallback vers Gemini pour ${selectedProvider}`);
                 usedFallback = true;
-            } else {
-                const status = groqResponse.status === 401 ? 401 : 502;
-                return res.status(status).json({
-                    error: `Erreur API Groq (${groqResponse.status}) : ${detail || "réponse inattendue"}`
-                });
-            }
-        } else {
-            const data = await groqResponse.json();
-            rawContent = data?.choices?.[0]?.message?.content;
-            if (!rawContent && GEMINI_API_KEY) {
-                console.warn("[generate] Réponse Groq vide — bascule vers Gemini.");
-                usedFallback = true;
-            }
-        }
-
-        if (usedFallback) {
-            console.log("[generate] Génération via Gemini (fallback Groq)…");
-            try {
                 rawContent = await callGemini({
                     theme: typeof theme === "string" ? theme.trim() : "",
                     artist,
                     isAutoMode: Boolean(isAutoMode)
                 });
-            } catch (geminiErr) {
-                console.error("[generate] Fallback Gemini échoué :", geminiErr.message);
-                return res.status(502).json({
-                    error: `Groq indisponible et fallback Gemini échoué : ${geminiErr.message}`
-                });
+            } else {
+                throw providerErr;
             }
         }
 
@@ -440,7 +490,6 @@ app.post("/api/generate", async (req, res) => {
             stylePrompt: typeof parsed.stylePrompt === "string" ? parsed.stylePrompt : "",
             coverPrompt: typeof parsed.coverPrompt === "string" ? parsed.coverPrompt : "",
             blocks: (() => {
-                // Nettoyage individuel des blocs renvoyés par le modèle…
                 const clean = Array.isArray(parsed.blocks)
                     ? parsed.blocks
                         .filter((b) => b && typeof b === "object")
@@ -449,8 +498,6 @@ app.post("/api/generate", async (req, res) => {
                             text: typeof b.text === "string" ? b.text : ""
                         }))
                     : [];
-                // …puis harmonisation des titres de sections avec la langue
-                // imposée par l'artiste de référence (anglais/espagnol/français).
                 return normalizeBlockTypes(clean, artist);
             })()
         };
@@ -540,6 +587,25 @@ app.post("/api/suno/generate", async (req, res) => {
         console.error("[suno] Erreur generate :", err);
         res.status(500).json({ error: "Erreur interne du serveur : " + err.message });
     }
+});
+
+/**
+ * Route GET /api/ai-providers
+ * Renvoie la liste des providers AI disponibles et leurs configurations publiques
+ */
+app.get("/api/ai-providers", (req, res) => {
+    const providers = Object.entries(AI_PROVIDERS).map(([key, config]) => {
+        const hasServerKey = !!process.env[config.apiKeyEnv];
+        return {
+            id: key,
+            name: config.name,
+            freeQuota: config.freeQuota,
+            docsUrl: config.docsUrl,
+            hasServerKey,
+            defaultModel: config.defaultModel
+        };
+    });
+    res.json({ providers });
 });
 
 /**
@@ -1019,6 +1085,77 @@ async function callGemini({ theme, artist, isAutoMode }) {
     return text;
 }
 
+/**
+ * Appel générique vers un provider AI (OpenAI-compatible : Groq, OpenRouter, Together, Mistral)
+ */
+async function callOpenAICompatible({ theme, artist, isAutoMode, providerKey, apiKey, model }) {
+    const provider = AI_PROVIDERS[providerKey];
+    if (!provider) throw new Error(`Provider ${providerKey} non configuré`);
+    
+    const systemPrompt = buildSystemPrompt({ theme, artist, isAutoMode });
+    const userInstruction = [
+        "Génère la chanson complète conformément aux instructions du système.",
+        "Réponds UNIQUEMENT avec l'objet JSON valide, sans texte autour, sans balises markdown."
+    ].join("\n");
+
+    const url = provider.url;
+    const response = await fetch(url, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${apiKey}`,
+            "HTTP-Referer": "https://music-hit-maker.com",
+            "X-Title": "Music Hit Maker Studio"
+        },
+        body: JSON.stringify({
+            model: model || provider.defaultModel,
+            temperature: 0.9,
+            max_tokens: 4096,
+            messages: [
+                { role: "system", content: systemPrompt },
+                { role: "user", content: userInstruction }
+            ]
+        })
+    });
+
+    if (!response.ok) {
+        let detail = "";
+        try {
+            const errBody = await response.json();
+            detail = errBody?.error?.message || JSON.stringify(errBody);
+        } catch (_) {
+            detail = "";
+        }
+        throw new Error(`Erreur API ${provider.name} (${response.status}) : ${detail || "réponse inattendue"}`);
+    }
+
+    const data = await response.json();
+    const content = data?.choices?.[0]?.message?.content;
+    if (!content) throw new Error(`Réponse vide de l'API ${provider.name}.`);
+    return content;
+}
+
+/**
+ * Appel unifié vers n'importe quel provider AI
+ */
+async function callAIProvider({ theme, artist, isAutoMode, provider, apiKey, model }) {
+    const providerKey = provider || "groq";
+    const providerConfig = AI_PROVIDERS[providerKey];
+    if (!providerConfig) throw new Error(`Provider ${providerKey} inconnu`);
+    
+    // Utiliser la clé fournie ou la clé serveur
+    const effectiveApiKey = apiKey && apiKey.trim().length >= 10 ? apiKey.trim() : process.env[providerConfig.apiKeyEnv];
+    if (!effectiveApiKey || effectiveApiKey.trim().length < 10) {
+        throw new Error(`Clé API ${providerConfig.name} manquante ou invalide.`);
+    }
+
+    if (providerKey === "gemini") {
+        return callGemini({ theme, artist, isAutoMode });
+    } else {
+        return callOpenAICompatible({ theme, artist, isAutoMode, providerKey, apiKey: effectiveApiKey, model: model || providerConfig.defaultModel });
+    }
+}
+
 // --- Détection serverless (Vercel) ---
 // Doit être défini AVANT toute écriture disque : le filesystem est en
 // lecture seule sur Vercel, seul /tmp est accessible en écriture.
@@ -1452,7 +1589,8 @@ app.post("/api/publish", upload.single('file'), async (req, res) => {
             songTitle = "",
             caption = "",          // texte du post rédigé dans la modale (prérempli IA)
             coverPrompt = "",       // prompt de pochette (prioritaire sur stylePrompt)
-            artistUsed = "Artiste Polyvalent"
+            artistUsed = "Artiste Polyvalent",
+            userId = null           // identifiant utilisateur optionnel
         } = req.body;
         console.log(`[PUBLISH] Metadata - Style: ${stylePrompt.substring(0, 30)}..., Cover: ${coverPrompt.substring(0, 30)}..., Artist: ${artistUsed}`);
 
@@ -1645,6 +1783,7 @@ app.post("/api/publish", upload.single('file'), async (req, res) => {
 
         const publishedTrack = {
             id: `pub-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+            userId: userId || null, // ID utilisateur optionnel pour filtrer ses propres morceaux
             title: songTitle || theme || "Track publié",
             artistUsed,
             stylePrompt,

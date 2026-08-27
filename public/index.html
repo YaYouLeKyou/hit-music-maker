@@ -224,6 +224,18 @@
                     <textarea id="gen-theme" rows="2" placeholder="Laisse vide pour un thème profond automatique… Ex : un été à Paris"
                         class="w-full rounded-lg bg-night border border-purple-800/70 p-3 text-sm outline-none transition-colors duration-200 placeholder:text-slate-500 focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/30"></textarea>
 
+                    <!-- Sélection du provider AI -->
+                    <label for="ai-provider" class="block text-sm font-medium text-slate-300 mt-4 mb-1">Provider IA (gratuit)</label>
+                    <select id="ai-provider"
+                        class="w-full rounded-lg bg-night border border-purple-800/70 px-3 py-3 text-sm outline-none transition-colors duration-200 focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/30">
+                        <option value="groq">Groq (Mixtral 8x7B)</option>
+                        <option value="gemini">Google Gemini 1.5 Flash</option>
+                        <option value="openrouter">OpenRouter (Llama 3 8B)</option>
+                        <option value="together">Together AI (Llama 3 8B)</option>
+                        <option value="mistral">Mistral Small</option>
+                    </select>
+                    <p class="text-xs text-slate-500 mt-1">Providers gratuits avec quotas généreux</p>
+
                     <!-- Style cible libre (optionnel) -->
                     <label for="gen-style" class="block text-sm font-medium text-slate-300 mt-4 mb-1">Style cible libre (optionnel)</label>
                     <input id="gen-style" type="text" placeholder="Ex : Afro-pop français, ambiance nostalgique"
@@ -427,8 +439,11 @@
                              </a>
                          </div>
                          <p class="font-bold text-fuchsia-300 text-sm mt-3 mb-1.5">
-                             4. publier et écouté les hit de la communauté, suivez nous sur nos pages
+                             4. Rejoignez nous!
+                         <p class="text-xs text-slate-300 leading-relaxed flex-1">
+                        Publiez ou écoutez les hits de la communauté sur nos pages.
                          </p>
+                        </p>
                      </div>
                 </div>
 

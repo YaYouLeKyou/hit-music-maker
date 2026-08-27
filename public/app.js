@@ -12,6 +12,7 @@
 const LS_API_KEY = "mhms_groq_api_key";
 const LS_HISTORY = "mhms_history";
 const LS_STUDIO = "mhms_studio_state";
+const LS_USER_ID = "mhms_user_id";
 
 const BLOCK_TYPES = ["Intro", "Couplet 1", "Couplet 2", "Pré-refrain", "Refrain", "Pont", "Outro"];
 
@@ -134,6 +135,29 @@ async function copyToClipboard(text, successMsg) {
 
 function getApiKey() {
     return localStorage.getItem(LS_API_KEY) || "";
+}
+
+async function loadAiProviders() {
+    try {
+        const res = await fetch("/api/ai-providers");
+        if (!res.ok) return;
+        const data = await res.json();
+        const select = $("ai-provider");
+        if (!select || !data.providers) return;
+        const lastProvider = localStorage.getItem("mhms_ai_provider") || "groq";
+        select.innerHTML = data.providers
+            .map(p => `<option value="${p.id}" ${p.id === lastProvider ? "selected" : ""}>${escapeHtml(p.name)} — ${escapeHtml(p.freeQuota)}</option>`)
+            .join("");
+        select.addEventListener("change", () => {
+            localStorage.setItem("mhms_ai_provider", select.value);
+            const provider = data.providers.find(p => p.id === select.value);
+            if (provider) {
+                toast(`Provider ${provider.name} sélectionné`);
+            }
+        });
+    } catch (e) {
+        console.warn("[AI] Échec chargement providers:", e.message);
+    }
 }
 
 // ============================================================
@@ -352,6 +376,7 @@ async function generateWithGroq(isAutoMode = false) {
     const customArtist = $("artist-custom") ? $("artist-custom").value.trim() : "";
     const targetArtist = customArtist || ($("artist-style") ? $("artist-style").value : "");
     const styleLibre = $("gen-style").value.trim();
+    const provider = $("ai-provider") ? $("ai-provider").value : "groq";
 
     // Le style libre est fusionné dans le thème s'il est renseigné
     if (!isAutoMode && styleLibre) {
@@ -368,14 +393,14 @@ async function generateWithGroq(isAutoMode = false) {
     btn.classList.add("generating");
 
     try {
-        // Réactivation future de la clé client : ajouter "apiKey" au payload
         const res = await fetch("/api/generate", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 theme: isAutoMode ? "" : theme,
                 targetArtist: isAutoMode ? "" : targetArtist,
-                isAutoMode: Boolean(isAutoMode)
+                isAutoMode: Boolean(isAutoMode),
+                provider: provider
             })
         });
 
@@ -1026,6 +1051,18 @@ function getManualSongTitle() {
     return $("gen-title") ? $("gen-title").value.trim() : "";
 }
 
+/** ID utilisateur optionnel (localStorage). Créé automatiquement si absent. */
+function getUserId() {
+    try {
+        let uid = localStorage.getItem(LS_USER_ID);
+        if (!uid) {
+            uid = "user-" + Math.random().toString(36).slice(2, 10) + "-" + Date.now().toString(36).slice(-6);
+            localStorage.setItem(LS_USER_ID, uid);
+        }
+        return uid;
+    } catch { return "anon"; }
+}
+
 // ============================================================
 // Modale « Upload & Publier »
 // Permet de publier une chanson sur Facebook & Instagram soit via
@@ -1124,12 +1161,13 @@ function setPublishStatus(status) {
     box.innerHTML = `<p><i class="fa-solid ${icons[status.type]} mr-2"></i>${status.html}</p>`;
 }
 
-/** Ajoute les métadonnées communes (titre, style, thème, artiste) au FormData */
+/** Ajoute les métadonnées communes (titre, style, thème, artiste, userId) au FormData */
 function appendCommonMetadata(formData) {
     formData.append("stylePrompt", state.stylePrompt.trim());
     formData.append("theme", $("gen-theme") ? $("gen-theme").value.trim() : "");
     formData.append("songTitle", getManualSongTitle());
     formData.append("artistUsed", getSelectedArtistName() || "Artiste Polyvalent");
+    formData.append("userId", getUserId());
     // Texte du post édité dans la modale (vide -> légende standard du serveur)
     formData.append("caption", $("publish-caption") ? $("publish-caption").value.trim() : "");
     // Couvert prompt (optionnel, servant à générer la pochette IA)
@@ -1460,7 +1498,8 @@ async function performPublish() {
                 videoUrl: data.videoUrl || null,
                 stylePrompt: state.stylePrompt.trim(),
                 artistUsed: getSelectedArtistName(),
-                blocks: state.blocks
+                blocks: state.blocks,
+                userId: getUserId()
             });
         } catch (saveErr) {
             console.warn("[Published] Non-fatal save error:", saveErr.message);
@@ -1769,6 +1808,9 @@ function init() {
     // refreshApiKeyUi(); // [COMMENTÉ] réactiver avec la fonctionnalité clé API client
     initPresets();
     populateArtistSelect();
+
+    // --- Chargement des providers IA disponibles ---
+    loadAiProviders();
 
     // --- Onglets ---
     $("tab-studio").addEventListener("click", () => switchTab("studio"));
