@@ -1519,6 +1519,20 @@ function renderMusicTracks(tracks, provider) {
     });
 }
 
+/** Sauvegarde un track publié dans localStorage (fallback pour page Published Tracks) */
+function savePublishedTrack(track) {
+    try {
+        const stored = localStorage.getItem('publishedTracks');
+        const tracks = stored ? JSON.parse(stored) : [];
+        tracks.unshift(track);
+        // Garder max 200
+        localStorage.setItem('publishedTracks', JSON.stringify(tracks.slice(0, 200)));
+        console.log("[Published] Track sauvegardé dans localStorage");
+    } catch (e) {
+        console.warn("[Published] Échec sauvegarde localStorage :", e.message);
+    }
+}
+
 /** Sauvegarde automatiquement le morceau généré (avec pistes audio) dans l'historique */
 function saveSongWithTracks(tracks, provider) {
     const song = {
