@@ -1649,8 +1649,8 @@ app.post("/api/publish", upload.single('file'), async (req, res) => {
             artistUsed,
             stylePrompt,
             theme,
-            // Style musical déduit du stylePrompt (première indication)
-            style: stylePrompt ? stylePrompt.split(/[,\s]+/).slice(0, 3).join(", ").trim() : "",
+            // Style musical déduit du stylePrompt (première indication, sinon "World")
+            style: stylePrompt ? (stylePrompt.split(/[,\s]+/).slice(0, 3).join(", ").trim() || "World") : "World",
             // Langue / origine détectée via l'artiste BDD
             origin: artistUsed && /Artiste Polyvalent/.test(artistUsed) ? "International"
                 : /R&B|Blues/.test(stylePrompt || "") ? "US"
