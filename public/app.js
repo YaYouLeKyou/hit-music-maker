@@ -175,29 +175,38 @@ async function loadAiProviders() {
     }
 }
 
+const PROVIDER_COLORS = {
+    groq:      { color: "fuchsia",   btn: "bg-fuchsia-600/80 hover:bg-fuchsia-500",    border: "border-fuchsia-500",   ring: "focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/30",   text: "text-fuchsia-400",      textLight: "text-fuchsia-300",   hoverText: "hover:text-fuchsia-300" },
+    gemini:    { color: "cyan",      btn: "bg-cyan-600/80 hover:bg-cyan-500",            border: "border-cyan-500",      ring: "focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/30",           text: "text-cyan-400",         textLight: "text-cyan-300",      hoverText: "hover:text-cyan-300" },
+    openrouter:{ color: "orange",    btn: "bg-orange-600/80 hover:bg-orange-500",          border: "border-orange-500",    ring: "focus:border-orange-500 focus:ring-2 focus:ring-orange-500/30",       text: "text-orange-400",       textLight: "text-orange-300",    hoverText: "hover:text-orange-300" },
+    together:  { color: "indigo",    btn: "bg-indigo-600/80 hover:bg-indigo-500",          border: "border-indigo-500",    ring: "focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30",       text: "text-indigo-400",       textLight: "text-indigo-300",    hoverText: "hover:text-indigo-300" },
+    mistral:   { color: "purple",    btn: "bg-purple-600/80 hover:bg-purple-500",          border: "border-purple-500",    ring: "focus:border-purple-500 focus:ring-2 focus:ring-purple-500/30",       text: "text-purple-400",       textLight: "text-purple-300",    hoverText: "hover:text-purple-300" }
+};
+
 /** Charge le panneau de configuration pour le provider sélectionné */
 function loadProviderConfigPanel(providerId) {
     const panel = $("ai-provider-config-panel");
     if (!panel) return;
     
     const providerConfig = {
-        groq: { name: "Groq", color: "fuchsia", desc: "LPU ultra-rapide avec modèles open source (Mixtral, Llama). Quota gratuit mensuel généreux.", docsUrl: "https://console.groq.com/keys" },
-        gemini: { name: "Google Gemini", color: "cyan", desc: "Modèles Gemini (Flash, Pro). 1 500 requêtes / jour gratuites.", docsUrl: "https://makersuite.google.com/app/apikey" },
-        openrouter: { name: "OpenRouter", color: "orange", desc: "Accès à des modèles gratuits (Llama, Mistral, Qwen) via un point d'accès unifié.", docsUrl: "https://openrouter.ai/keys" },
-        together: { name: "Together AI", color: "indigo", desc: "1 million de tokens gratuits à l'inscription. Modèles Llama 3, Mixtral et Qwen.", docsUrl: "https://api.together.xyz/settings/api-keys" },
-        mistral: { name: "Mistral AI", color: "purple", desc: "Modèles open source français. Petit modèle 7B et Mixtral 8x22B.", docsUrl: "https://console.mistral.ai/api-keys/" }
+        groq: { name: "Groq", desc: "LPU ultra-rapide avec modèles open source (Mixtral, Llama). Quota gratuit mensuel généreux.", docsUrl: "https://console.groq.com/keys" },
+        gemini: { name: "Google Gemini", desc: "Modèles Gemini (Flash, Pro). 1 500 requêtes / jour gratuites.", docsUrl: "https://makersuite.google.com/app/apikey" },
+        openrouter: { name: "OpenRouter", desc: "Accès à des modèles gratuits (Llama, Mistral, Qwen) via un point d'accès unifié.", docsUrl: "https://openrouter.ai/keys" },
+        together: { name: "Together AI", desc: "1 million de tokens gratuits à l'inscription. Modèles Llama 3, Mixtral et Qwen.", docsUrl: "https://api.together.xyz/settings/api-keys" },
+        mistral: { name: "Mistral AI", desc: "Modèles open source français. Petit modèle 7B et Mixtral 8x22B.", docsUrl: "https://console.mistral.ai/api-keys/" }
     };
     
     const config = providerConfig[providerId];
     if (!config) return;
 
+    const colors = PROVIDER_COLORS[providerId] || PROVIDER_COLORS.groq;
     const data = window._aiProvidersData?.providers?.find(p => p.id === providerId) || { models: [], defaultModel: "" };
     const key = getProviderKey(providerId);
     const hasKey = key.length > 0;
     
     panel.innerHTML = `
         <div class="flex items-center justify-between mb-2">
-            <h3 class="font-bold text-${config.color}-300">${config.name}</h3>
+            <h3 class="font-bold ${colors.textLight}">${config.name}</h3>
             ${hasKey ? '<span class="text-xs px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">Clé enregistrée ✓</span>' : '<span class="text-xs px-1.5 py-0.5 rounded bg-red-500/15 text-red-300 border border-red-500/30">Clé manquante</span>'}
         </div>
         <p class="text-xs text-slate-400 mb-3">${config.desc}</p>
@@ -206,14 +215,14 @@ function loadProviderConfigPanel(providerId) {
         <div class="mb-3">
             <label class="block text-xs text-slate-300 mb-1">Modèle IA :</label>
             <select id="model-select-${providerId}"
-                class="w-full rounded-lg bg-night border border-purple-800/70 px-3 py-2 text-sm outline-none transition-colors duration-200 focus:border-${config.color}-500 focus:ring-2 focus:ring-${config.color}-500/30 cursor-pointer">
+                class="w-full rounded-lg bg-night border border-purple-800/70 px-3 py-2 text-sm outline-none transition-colors duration-200 ${colors.ring} cursor-pointer">
                 ${data.models?.map(m => `<option value="${m.id}" ${m.id === data.defaultModel ? "selected" : ""}>${escapeHtml(m.name)}</option>`).join("") || `<option value="${escapeHtml(data.defaultModel || 'default')}">${escapeHtml(config.name)} - Modèle par défaut</option>`}
             </select>
         </div>
         
         <!-- Mode d'emploi -->
         <div class="text-xs text-slate-500 mb-3 p-3 bg-panel/50 rounded-lg">
-            <strong class="text-${config.color}-300">Mode d'emploi :</strong><br>
+            <strong class="${colors.textLight}">Mode d'emploi :</strong><br>
             1. Obtenez votre clé API depuis le lien ci-dessous.<br>
             2. Collez la clé dans le champ ci-dessus.<br>
             3. Laissez le modèle par défaut ou choisissez-en un autre.<br>
@@ -224,14 +233,14 @@ function loadProviderConfigPanel(providerId) {
         <div class="flex items-center gap-2 mb-2">
             <input type="password" data-provider-key="${providerId}" placeholder="${config.name} clé API…"
                 value="${escapeHtml(key)}"
-                class="flex-1 rounded-lg bg-night border border-purple-800/70 p-2 text-xs outline-none transition-colors duration-200 placeholder:text-slate-500 focus:border-${config.color}-500 focus:ring-2 focus:ring-${config.color}-500/30 font-mono">
-            <button type="button" class="px-3 py-2 rounded-lg bg-${config.color}-600/80 hover:bg-${config.color}-500 transition-all duration-200 text-white font-sm font-semibold active:scale-95"
+                class="flex-1 rounded-lg bg-night border border-purple-800/70 p-2 text-xs outline-none transition-colors duration-200 placeholder:text-slate-500 ${colors.border} ${colors.ring} font-mono">
+            <button type="button" class="px-3 py-2 rounded-lg ${colors.btn} transition-all duration-200 text-white font-sm font-semibold active:scale-95"
                     data-provider-key="${providerId}">
                 <i class="fa-solid fa-save mr-1"></i>Enregistrer
             </button>
         </div>
         <a href="${config.docsUrl}" target="_blank" rel="noopener"
-            class="text-xs text-${config.color}-400 hover:text-${config.color}-300 inline-flex items-center">
+            class="text-xs ${colors.text} ${colors.hoverText} inline-flex items-center">
             <i class="fa-solid fa-key mr-1"></i>Obtenir ma clé ${config.name}
         </a>
     `;
