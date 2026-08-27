@@ -1319,7 +1319,25 @@ const upload = require('multer')({
 
 // --- PUBLISHED TRACKS ENDPOINTS ---
 app.get("/api/published", async (req, res) => {
-    const tracks = await loadAllPublishedTracks();
+    let tracks = await loadAllPublishedTracks();
+
+    // Filtres optionnels : style, origin
+    const styleFilter = String(req.query.style || "").toLowerCase();
+    const originFilter = String(req.query.origin || "").toLowerCase();
+
+    if (styleFilter) {
+        tracks = tracks.filter(t => {
+            const val = String(t.style || t.genre || "").toLowerCase();
+            return val.includes(styleFilter);
+        });
+    }
+    if (originFilter) {
+        tracks = tracks.filter(t => {
+            const val = String(t.origin || "").toLowerCase();
+            return val.includes(originFilter);
+        });
+    }
+
     res.json(tracks);
 });
 
@@ -1631,6 +1649,14 @@ app.post("/api/publish", upload.single('file'), async (req, res) => {
             artistUsed,
             stylePrompt,
             theme,
+            // Style musical déduit du stylePrompt (première indication)
+            style: stylePrompt ? stylePrompt.split(/[,\s]+/).slice(0, 3).join(", ").trim() : "",
+            // Langue / origine détectée via l'artiste BDD
+            origin: artistUsed && /Artiste Polyvalent/.test(artistUsed) ? "International"
+                : /R&B|Blues/.test(stylePrompt || "") ? "US"
+                : /Latin|Spagnole/.test(stylePrompt || "") || /Reggaeton/.test(stylePrompt || "") ? "Latino"
+                : /Français|FR/.test(stylePrompt || "") || /^French/.test(artistUsed || "") ? "Français"
+                : "International",
             coverUrl: coverUrlFinal,
             audioUrl: audioUrlFinal,
             videoUrl: videoUrlFinal,
