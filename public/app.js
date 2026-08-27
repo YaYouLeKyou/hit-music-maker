@@ -809,7 +809,10 @@ async function publishToSocialMedia(audioUrl) {
 
         const res = await fetch("/api/publish?progress=1", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+                "X-Publish-Stream": "1",
+                "Content-Type": "application/json"
+            },
             body: JSON.stringify(payload)
         });
         const data = await consumePublishProgressStream(res);
@@ -1422,7 +1425,7 @@ async function performPublish() {
 
         setPublishStatus({ type: "info", html: "Traitement en cours sur le serveur : génération pochette, encodage vidéo, publication Facebook & Instagram…<br><span class='text-xs opacity-75'>Cela peut prendre 1 à 3 minutes selon la taille du fichier. Ne fermez pas cette fenêtre.</span>" });
 
-        const res = await fetch("/api/publish?progress=1", { method: "POST", body: sendBody });
+        const res = await fetch("/api/publish?progress=1", { method: "POST", headers: { "X-Publish-Stream": "1" }, body: sendBody });
 
         // Barre de progression « étape par étape » : le serveur répond en flux
         // NDJSON ; chaque événement met à jour la barre + le texte d'état en
