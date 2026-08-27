@@ -75,13 +75,13 @@ const ARTISTS_DATABASE = [
     },
     {
         name: "Theodora",
-        genre: "Rap / Drill FR",
-        bpm_range: "135-142",
-        instruments: "Heavy 808s, dark piano, orchestral strings, powerful brass, deep sub bass",
-        drum_style: "French drill with heavy 808s, powerful snare rolls, fast hi-hats, dramatic percussion",
+        genre: "French Dark R&B / Alternative Hyperpop",
+        bpm_range: "140-155",
+        instruments: "Distorted heavy 808 bass, Jersey club kick patterns, aggressive electronic synths, ethereal pads, glitchy arpeggios, chopped vocal samples, sub-bass, modular synth textures",
+        drum_style: "Moody Jersey club bounce with syncopated kick rolls, distorted 808 glides, fast-paced club beat, trap-inflected hi-hats, punchy claps, experimental percussion with stutter edits",
         language: "Français",
-        prompt_audio_preset: "French Drill, 138 BPM, dark powerful atmosphere, heavy 808 sub bass, dark piano, orchestral strings, powerful auto-tuned male vocal, radio-ready punchy mix, wide stereo image",
-        flow_signature: "Powerful drill flow, commanding delivery, aggressive verses, anthemic choruses, strong presence"
+        prompt_audio_preset: "French dark R&B meets alternative hyperpop, 145 BPM, moody Jersey club bounce, distorted heavy 808 bass, aggressive electronic synth leads, ethereal auto-tuned female vocals, sensual nocturnal vibe, fast-paced club beat, experimental production with glitch textures, dark atmospheric pads, radio-ready polished mix, wide stereo image, sub-bass presence",
+        flow_signature: "Sensual nocturnal whisper-to-chest-voice delivery, ethereal auto-tuned melodic hooks, hyperpop pitched vocal stacks, Jersey club rhythmic precision, experimental vocal chops, French lyrics with English ad-libs, dark feminine energy, hypnotic repetition, club-ready anthemic choruses"
     },
     {
         name: "SCH",

@@ -820,39 +820,10 @@ async function publishToSocialMedia(audioUrl) {
         const facebook = data.facebook ? "✅ Facebook" : "⚠️ Facebook";
         const instagram = data.instagram ? "✅ Instagram" : "⚠️ Instagram";
         toast(`Publication : ${facebook} | ${instagram}`, "success");
-
-        // Sauvegarder le track publié dans localStorage pour la page "Tracks Publiés"
-        // audioUrl/coverUrl : versions locales servies par le serveur (lecture fiable)
-        savePublishedTrack({
-            title: payload.songTitle || payload.generatedTheme || "Track publié",
-            audioUrl: data.audioUrl || audioUrl,
-            coverUrl: data.coverUrl || "/covers/cover_of_the_day.png",
-            videoUrl: data.videoUrl || null,
-            stylePrompt: payload.stylePrompt,
-            artistUsed: payload.artistUsed,
-            blocks: payload.blocks
-        });
     } catch (err) {
         console.error("Publication échouée :", err);
         resetPublishProgress();
         toast("⚠️ Publication partielle : " + err.message, "warning");
-    }
-}
-
-/** Sauvegarde un track publié dans localStorage */
-function savePublishedTrack(trackData) {
-    try {
-        const existing = JSON.parse(localStorage.getItem("publishedTracks") || "[]");
-        const newTrack = {
-            id: Date.now() + "-" + Math.random().toString(36).slice(2, 9),
-            ...trackData,
-            createdAt: new Date().toISOString()
-        };
-        existing.unshift(newTrack);
-        localStorage.setItem("publishedTracks", JSON.stringify(existing));
-        console.log("Track publié sauvegardé :", newTrack.id);
-    } catch (e) {
-        console.error("Erreur sauvegarde track publié :", e);
     }
 }
 

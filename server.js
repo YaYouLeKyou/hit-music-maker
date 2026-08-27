@@ -1068,35 +1068,85 @@ app.get("/uploads/:filename", (req, res) => {
 });
 
 // --- Stockage serveur des tracks publiées ---
-// En local : dossier published/ à la racine du projet.
-// Sur Vercel (serverless) : /tmp/published (filesystem en lecture seule ailleurs).
-const PUBLISHED_TRACKS_DIR = IS_SERVERLESS
-    ? path.join(require("os").tmpdir(), "published")
-    : path.join(__dirname, "published");
-ensureDir(PUBLISHED_TRACKS_DIR);
+// Utilise Vercel Blob si BLOB_READ_WRITE_TOKEN est défini (persistant).
+// Fallback : disque local (/published/ en local, /tmp/published sur Vercel).
+// ============================================================
 
-function getPublishedTrackPath(id) {
-    return path.join(PUBLISHED_TRACKS_DIR, `${id}.json`);
+function getPublishedTracksDir() {
+    if (IS_SERVERLESS) return path.join(require("os").tmpdir(), "published");
+    return path.join(__dirname, "published");
+}
+ensureDir(getPublishedTracksDir());
+
+const PUBLISHED_BLOB_KEY = "published-tracks/index.json";
+const blobAvailable = () => !!process.env.BLOB_READ_WRITE_TOKEN;
+
+/** Lit la liste complète des tracks depuis Vercel Blob (un seul fichier JSON). */
+async function getPublishedTracksFromBlob() {
+    if (!blobAvailable()) return null;
+    try {
+        const { list } = require("@vercel/blob");
+        const { blobs } = await list({ prefix: "published-tracks/" });
+        const idxBlob = blobs.find(b => b.pathname === PUBLISHED_BLOB_KEY);
+        if (!idxBlob) return [];
+        const res = await fetch(idxBlob.url);
+        if (!res.ok) return [];
+        const data = await res.json();
+        return Array.isArray(data) ? data : [];
+    } catch (err) {
+        console.warn("[PUBLISHED] Lecture Blob impossible :", err.message);
+        return null;
+    }
 }
 
-function savePublishedTrackToDisk(track) {
+async function savePublishedTrackToDisk(track) {
+    // 1) Vercel Blob (persistant)
+    if (blobAvailable()) {
+        try {
+            const { put } = require("@vercel/blob");
+            const existing = (await getPublishedTracksFromBlob()) || [];
+            existing.unshift(track);
+            await put(
+                PUBLISHED_BLOB_KEY,
+                JSON.stringify(existing.slice(0, 200), null, 2),
+                { access: "public", addRandomSuffix: false, contentType: "application/json" }
+            );
+            console.log("[PUBLISHED] Track sauvegardé sur Vercel Blob ✓");
+            return true;
+        } catch (blobErr) {
+            console.warn("[PUBLISHED] Échec Blob, fallback disque :", blobErr.message);
+        }
+    }
+
+    // 2) Disque local (fallback)
     try {
-        const p = getPublishedTrackPath(track.id);
+        const dir = getPublishedTracksDir();
+        const p = path.join(dir, `${track.id}.json`);
         require("fs").writeFileSync(p, JSON.stringify(track, null, 2));
         return true;
     } catch (err) {
-        console.warn("[PUBLISHED] Sauvegarde impossible :", err.message);
+        console.warn("[PUBLISHED] Sauvegarde disque impossible :", err.message);
         return false;
     }
 }
 
-function loadAllPublishedTracks() {
+async function loadAllPublishedTracks() {
+    // 1) Vercel Blob
+    if (blobAvailable()) {
+        const fromBlob = await getPublishedTracksFromBlob();
+        if (fromBlob !== null) {
+            return fromBlob.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        }
+    }
+
+    // 2) Disque local
     try {
-        const files = require("fs").readdirSync(PUBLISHED_TRACKS_DIR).filter(f => f.endsWith(".json"));
+        const dir = getPublishedTracksDir();
+        const files = require("fs").readdirSync(dir).filter(f => f.endsWith(".json"));
         const tracks = [];
         for (const f of files) {
             try {
-                const raw = require("fs").readFileSync(path.join(PUBLISHED_TRACKS_DIR, f), "utf8");
+                const raw = require("fs").readFileSync(path.join(dir, f), "utf8");
                 tracks.push(JSON.parse(raw));
             } catch {}
         }
@@ -1106,13 +1156,34 @@ function loadAllPublishedTracks() {
     }
 }
 
-function deletePublishedTrackFromDisk(id) {
+async function deletePublishedTrackFromDisk(id) {
+    // 1) Vercel Blob : retirer l'élément du tableau
+    if (blobAvailable()) {
+        try {
+            const existing = (await getPublishedTracksFromBlob()) || [];
+            const filtered = existing.filter(t => t.id !== id);
+            if (filtered.length !== existing.length) {
+                const { put } = require("@vercel/blob");
+                await put(
+                    PUBLISHED_BLOB_KEY,
+                    JSON.stringify(filtered, null, 2),
+                    { access: "public", addRandomSuffix: false, contentType: "application/json" }
+                );
+                console.log(`[PUBLISHED] Track ${id} supprimé du Blob`);
+            }
+        } catch (blobErr) {
+            console.warn("[PUBLISHED] Suppression Blob impossible :", blobErr.message);
+        }
+    }
+
+    // 2) Disque local
     try {
-        const p = getPublishedTrackPath(id);
+        const dir = getPublishedTracksDir();
+        const p = path.join(dir, `${id}.json`);
         if (require("fs").existsSync(p)) require("fs").unlinkSync(p);
         return true;
     } catch (err) {
-        console.warn("[PUBLISHED] Suppression impossible :", err.message);
+        console.warn("[PUBLISHED] Suppression disque impossible :", err.message);
         return false;
     }
 }
@@ -1176,7 +1247,6 @@ function persistUploadedAudio(filePath) {
 // ============================================================
 // PERSISTANCE VERCEL BLOB — stockage permanent des fichiers générés
 // ============================================================
-const blobAvailable = () => !!process.env.BLOB_READ_WRITE_TOKEN;
 
 /**
  * Copie un buffer vers Vercel Blob (URL publique permanente).
@@ -1248,14 +1318,14 @@ const upload = require('multer')({
 });
 
 // --- PUBLISHED TRACKS ENDPOINTS ---
-app.get("/api/published", (req, res) => {
-    const tracks = loadAllPublishedTracks();
+app.get("/api/published", async (req, res) => {
+    const tracks = await loadAllPublishedTracks();
     res.json(tracks);
 });
 
-app.delete("/api/published/:id", (req, res) => {
+app.delete("/api/published/:id", async (req, res) => {
     const { id } = req.params;
-    const ok = deletePublishedTrackFromDisk(id);
+    const ok = await deletePublishedTrackFromDisk(id);
     if (!ok) return res.status(500).json({ error: "Impossible de supprimer le track." });
     res.json({ status: "DELETED", id });
 });
@@ -1570,7 +1640,7 @@ app.post("/api/publish", upload.single('file'), async (req, res) => {
             videoGenerated: !!videoPath,
             createdAt: new Date().toISOString()
         };
-        savePublishedTrackToDisk(publishedTrack);
+        await savePublishedTrackToDisk(publishedTrack);
 
         // Réponse finale : done contient le track complet (id compris) pour que
         // le front l'enregistre tel quel dans « Tracks publiés » / localStorage.
