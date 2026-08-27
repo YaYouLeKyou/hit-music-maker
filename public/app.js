@@ -142,25 +142,25 @@ async function loadAiProviders() {
     try {
         const res = await fetch("/api/ai-providers");
         if (!res.ok) return;
-        const data = await res.json();
+        window._aiProvidersData = await res.json();
         const select = $("ai-provider");
         const providerSelect = $("provider-select");
-        if (!select || !data.providers) return;
+        if (!select || !window._aiProvidersData.providers) return;
         const lastProvider = localStorage.getItem("mhms_ai_provider") || "groq";
         
-        select.innerHTML = data.providers
+        select.innerHTML = window._aiProvidersData.providers
             .map(p => `<option value="${p.id}" ${p.id === lastProvider ? "selected" : ""}>${escapeHtml(p.name)} — ${escapeHtml(p.freeQuota)}</option>`)
             .join("");
         select.addEventListener("change", () => {
             localStorage.setItem("mhms_ai_provider", select.value);
-            const provider = data.providers.find(p => p.id === select.value);
+            const provider = window._aiProvidersData.providers.find(p => p.id === select.value);
             if (provider) {
                 toast(`Provider ${provider.name} sélectionné`);
             }
         });
         
         // Populate provider selector for config
-        providerSelect.innerHTML = data.providers
+        providerSelect.innerHTML = window._aiProvidersData.providers
             .map(p => `<option value="${p.id}" ${p.id === lastProvider ? "selected" : ""}>${escapeHtml(p.name)}</option>`)
             .join("");
         providerSelect.addEventListener("change", () => {
@@ -181,16 +181,17 @@ function loadProviderConfigPanel(providerId) {
     if (!panel) return;
     
     const providerConfig = {
-        groq: { name: "Groq", color: "fuchsia", desc: "LPU ultra-rapide avec modèles open source (Mixtral, Llama). Quota gratuit mensuel généreux.", docsUrl: "https://console.groq.com/keys", docsText: "Obtenir ma clé Groq" },
-        gemini: { name: "Google Gemini", color: "cyan", desc: "Modèles Gemini (Flash, Pro). 1 500 requêtes / jour gratuites. Fallback image Nano Banana.", docsUrl: "https://makersuite.google.com/app/apikey", docsText: "Obtenir ma clé Gemini" },
-        openrouter: { name: "OpenRouter", color: "orange", desc: "Accès à des modèles gratuits (Llama, Mistral, Qwen) via un point d'accès unifié.", docsUrl: "https://openrouter.ai/keys", docsText: "Obtenir ma clé OpenRouter" },
-        together: { name: "Together AI", color: "indigo", desc: "1 million de tokens gratuits à l'inscription. Modèles Llama 3, Mixtral et Qwen.", docsUrl: "https://api.together.xyz/settings/api-keys", docsText: "Obtenir ma clé Together" },
-        mistral: { name: "Mistral AI", color: "purple", desc: "Modèles open source français. Petit modèle 7B et Mixtral 8x22B.", docsUrl: "https://console.mistral.ai/api-keys/", docsText: "Obtenir ma clé Mistral" }
+        groq: { name: "Groq", color: "fuchsia", desc: "LPU ultra-rapide avec modèles open source (Mixtral, Llama). Quota gratuit mensuel généreux.", docsUrl: "https://console.groq.com/keys" },
+        gemini: { name: "Google Gemini", color: "cyan", desc: "Modèles Gemini (Flash, Pro). 1 500 requêtes / jour gratuites.", docsUrl: "https://makersuite.google.com/app/apikey" },
+        openrouter: { name: "OpenRouter", color: "orange", desc: "Accès à des modèles gratuits (Llama, Mistral, Qwen) via un point d'accès unifié.", docsUrl: "https://openrouter.ai/keys" },
+        together: { name: "Together AI", color: "indigo", desc: "1 million de tokens gratuits à l'inscription. Modèles Llama 3, Mixtral et Qwen.", docsUrl: "https://api.together.xyz/settings/api-keys" },
+        mistral: { name: "Mistral AI", color: "purple", desc: "Modèles open source français. Petit modèle 7B et Mixtral 8x22B.", docsUrl: "https://console.mistral.ai/api-keys/" }
     };
     
     const config = providerConfig[providerId];
     if (!config) return;
-    
+
+    const data = window._aiProvidersData?.providers?.find(p => p.id === providerId) || { models: [], defaultModel: "" };
     const key = getProviderKey(providerId);
     const hasKey = key.length > 0;
     
@@ -199,9 +200,29 @@ function loadProviderConfigPanel(providerId) {
             <h3 class="font-bold text-${config.color}-300">${config.name}</h3>
             ${hasKey ? '<span class="text-xs px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">Clé enregistrée ✓</span>' : '<span class="text-xs px-1.5 py-0.5 rounded bg-red-500/15 text-red-300 border border-red-500/30">Clé manquante</span>'}
         </div>
-        <p class="text-xs text-slate-400 mb-2">${config.desc}</p>
+        <p class="text-xs text-slate-400 mb-3">${config.desc}</p>
+        
+        <!-- Modèle IA -->
+        <div class="mb-3">
+            <label class="block text-xs text-slate-300 mb-1">Modèle IA :</label>
+            <select id="model-select-${providerId}"
+                class="w-full rounded-lg bg-night border border-purple-800/70 px-3 py-2 text-sm outline-none transition-colors duration-200 focus:border-${config.color}-500 focus:ring-2 focus:ring-${config.color}-500/30 cursor-pointer">
+                ${data.models?.map(m => `<option value="${m.id}" ${m.id === data.defaultModel ? "selected" : ""}>${escapeHtml(m.name)}</option>`).join("") || `<option value="${escapeHtml(data.defaultModel || 'default')}">${escapeHtml(config.name)} - Modèle par défaut</option>`}
+            </select>
+        </div>
+        
+        <!-- Mode d'emploi -->
+        <div class="text-xs text-slate-500 mb-3 p-3 bg-panel/50 rounded-lg">
+            <strong class="text-${config.color}-300">Mode d'emploi :</strong><br>
+            1. Obtenez votre clé API depuis le lien ci-dessous.<br>
+            2. Collez la clé dans le champ ci-dessus.<br>
+            3. Laissez le modèle par défaut ou choisissez-en un autre.<br>
+            Aucune sauvegarde côté serveur : vos clés restent uniquement dans votre navigateur.
+        </div>
+        
+        <!-- Saisie de la clé API -->
         <div class="flex items-center gap-2 mb-2">
-            <input type="password" data-provider-key="${providerId}" placeholder="${config.name} clé API..."
+            <input type="password" data-provider-key="${providerId}" placeholder="${config.name} clé API…"
                 value="${escapeHtml(key)}"
                 class="flex-1 rounded-lg bg-night border border-purple-800/70 p-2 text-xs outline-none transition-colors duration-200 placeholder:text-slate-500 focus:border-${config.color}-500 focus:ring-2 focus:ring-${config.color}-500/30 font-mono">
             <button type="button" class="px-3 py-2 rounded-lg bg-${config.color}-600/80 hover:bg-${config.color}-500 transition-all duration-200 text-white font-sm font-semibold active:scale-95"
@@ -210,8 +231,8 @@ function loadProviderConfigPanel(providerId) {
             </button>
         </div>
         <a href="${config.docsUrl}" target="_blank" rel="noopener"
-            class="text-xs text-${config.color}-400 hover:text-${config.color}-300">
-            <i class="fa-solid fa-key mr-1"></i>${config.docsText}
+            class="text-xs text-${config.color}-400 hover:text-${config.color}-300 inline-flex items-center">
+            <i class="fa-solid fa-key mr-1"></i>Obtenir ma clé ${config.name}
         </a>
     `;
     
@@ -1301,6 +1322,250 @@ function setPublishStatus(status) {
     box.innerHTML = `<p><i class="fa-solid ${icons[status.type]} mr-2"></i>${status.html}</p>`;
 }
 
+// ============================================================
+// Background Publication Toast (non-blocking, bottom-right)
+// ============================================================
+
+let _backgroundPublishToast = null;
+let _backgroundPublishPollInterval = null;
+
+/** Affiche le toast de publication en arrière-plan (bottom-right) */
+function showBackgroundPublishToast(title = "Publication en cours…", message = "Préparation…", percent = 0) {
+    const toastEl = $("publish-toast");
+    if (!toastEl) return;
+
+    const titleEl = $("publish-toast-title");
+    const messageEl = $("publish-toast-message");
+    const barEl = $("publish-toast-bar");
+
+    if (titleEl) titleEl.textContent = title;
+    if (messageEl) messageEl.textContent = message;
+    if (barEl) barEl.style.width = percent + "%";
+
+    toastEl.classList.remove("hidden");
+    _backgroundPublishToast = true;
+}
+
+/** Met à jour le toast de publication en arrière-plan */
+function updateBackgroundPublishToast(message, percent = null) {
+    const messageEl = $("publish-toast-message");
+    const barEl = $("publish-toast-bar");
+
+    if (messageEl && message) messageEl.textContent = message;
+    if (barEl && percent !== null) barEl.style.width = percent + "%";
+}
+
+/** Met le toast en succès */
+function setBackgroundPublishToastSuccess(message) {
+    const toastEl = $("publish-toast");
+    if (!toastEl) return;
+
+    toastEl.innerHTML = `
+        <div class="bg-[#221d42]/95 backdrop-blur-sm border border-emerald-500/50 rounded-xl p-4 shadow-xl text-sm">
+            <div class="flex items-start gap-3">
+                <div class="flex-shrink-0">
+                    <i class="fa-solid fa-circle-check text-xl text-emerald-400"></i>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <div class="font-bold text-emerald-200 mb-1">Publication terminée ✓</div>
+                    <div class="text-slate-400">${escapeHtml(message)}</div>
+                </div>
+            </div>
+        </div>
+    `;
+    setTimeout(() => {
+        const t = $("publish-toast");
+        if (t) t.classList.add("hidden");
+    }, 10000);
+}
+
+/** Met le toast en erreur */
+function setBackgroundPublishToastError(message) {
+    const toastEl = $("publish-toast");
+    if (!toastEl) return;
+
+    toastEl.innerHTML = `
+        <div class="bg-[#221d42]/95 backdrop-blur-sm border border-red-500/50 rounded-xl p-4 shadow-xl text-sm">
+            <div class="flex items-start gap-3">
+                <div class="flex-shrink-0">
+                    <i class="fa-solid fa-circle-xmark text-xl text-red-400"></i>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <div class="font-bold text-red-200 mb-1">Échec de la publication</div>
+                    <div class="text-slate-400">${escapeHtml(message)}</div>
+                </div>
+            </div>
+        </div>
+    `;
+    setTimeout(() => {
+        const t = $("publish-toast");
+        if (t) t.classList.add("hidden");
+    }, 15000);
+}
+
+/** Cache le toast de publication en arrière-plan */
+function hideBackgroundPublishToast() {
+    const toastEl = $("publish-toast");
+    if (toastEl) toastEl.classList.add("hidden");
+    _backgroundPublishToast = false;
+}
+
+/** Ferme la modale de publication et lance la publication en arrière-plan */
+function startBackgroundPublish(formData) {
+    // Affiche le toast
+    showBackgroundPublishToast("Publication en cours…", "Envoi au serveur…", 5);
+
+    // Ferme la modale
+    closePublishModal();
+
+    // Lance la publication en arrière-plan
+    return performBackgroundPublish(formData);
+}
+
+/** Effectue la publication en arrière-plan avec polling de statut */
+async function performBackgroundPublish(formData) {
+    try {
+        const res = await fetch("/api/publish?progress=1", {
+            method: "POST",
+            headers: { "X-Publish-Stream": "1" },
+            body: formData
+        });
+
+        updateBackgroundPublishToast("Traitement serveur en cours…", 20);
+
+        // Consomme le flux de progression
+        const data = await consumeBackgroundPublishProgressStream(res, updateBackgroundPublishToast);
+
+        if (!res.ok) {
+            const detailLines = [];
+            if (data.error) detailLines.push(escapeHtml(data.error));
+            if (data.details) {
+                for (const [platform, msg] of Object.entries(data.details)) {
+                    if (msg) {
+                        detailLines.push(`${platform === "facebook" ? "📘 Facebook" : "📸 Instagram"} : ${escapeHtml(msg)}`);
+                    }
+                }
+            }
+            const html = detailLines.join("<br>") || `Erreur serveur (HTTP ${res.status})`;
+            console.error("[Background Publish] Échec de la publication :", JSON.stringify(data, null, 2));
+            setBackgroundPublishToastError(html);
+            toast(data.error || "Échec de la publication.", "error");
+            return;
+        }
+
+        // --- Succès ---
+        const fbLine = data.facebook
+            ? `✅ <a href="${escapeHtml(data.facebook.url)}" target="_blank" rel="noopener" class="underline hover:text-emerald-100">Voir sur Facebook</a>`
+            : `⚠️ Facebook non publié${data.details?.facebook ? " — " + escapeHtml(data.details.facebook) : ""}`;
+        let igLine;
+        if (data.instagram) {
+            igLine = `✅ <a href="${escapeHtml(data.instagram.url)}" target="_blank" rel="noopener" class="underline hover:text-emerald-100">Voir sur Instagram</a>`;
+        } else if (data.instagramPendingCreationId) {
+            const creationId = data.instagramPendingCreationId;
+            igLine = `⏳ Reel en traitement sur Instagram…`;
+            finalizeInstagramReelPoll(creationId);
+        } else {
+            igLine = `⚠️ Instagram non publié${data.details?.instagram ? " — " + escapeHtml(data.details.instagram) : ""}`;
+        }
+
+        const allOk = !!(data.facebook && data.instagram);
+        const msg = `${allOk ? "Chanson publiée avec succès !" : "Publication partielle."}<br>Facebook : ${fbLine}<br>Instagram : ${igLine}`;
+
+        setBackgroundPublishToastSuccess(msg);
+        toast(allOk ? "🎉 Chanson publiée sur Facebook & Instagram !" : "⚠️ Publication partielle — voir le toast.", allOk ? "success" : "warning");
+
+        // Sauvegarde pour la page « Published Tracks »
+        try {
+            savePublishedTrack({
+                title: getManualSongTitle() || ($("gen-theme") ? $("gen-theme").value.trim() : "") || "Track publié",
+                audioUrl: data.audioUrl || (formData.get("blobAudioUrl") ? "" : ""),
+                coverUrl: data.coverUrl || "/covers/cover_of_the_day.png",
+                videoUrl: data.videoUrl || null,
+                stylePrompt: state.stylePrompt.trim(),
+                artistUsed: getSelectedArtistName(),
+                blocks: state.blocks,
+                userId: getUserId()
+            });
+        } catch (saveErr) {
+            console.warn("[Published] Non-fatal save error:", saveErr.message);
+        }
+
+    } catch (err) {
+        console.error("[Background Publish] Erreur réseau/inattendue :", err);
+        setBackgroundPublishToastError(err.message || "Erreur inconnue");
+        toast("Échec de la publication : " + (err.message || "erreur inconnue"), "error");
+    }
+}
+
+/** Consomme le flux de progression NDJSON pour la publication en arrière-plan */
+async function consumeBackgroundPublishProgressStream(res, onProgress) {
+    const contentType = res.headers.get("content-type") || "";
+
+    // --- Erreurs hors flux ---
+    if (!res.ok && !contentType.includes("x-ndjson")) {
+        if (res.status === 413) {
+            throw new Error("Fichier trop volumineux : la limite d'envoi direct est de 4,5 Mo sur Vercel. Utilisez un fichier MP3 plus léger ou le mode « Lien ».");
+        }
+        if (res.status === 504) {
+            throw new Error("Le serveur a mis trop de temps à répondre (timeout). Essayez un fichier MP3 plus court, désactivez la génération vidéo, ou passez sur un plan Vercel avec maxDuration >= 300 s.");
+        }
+        let msg = "";
+        try { msg = (await res.json()).error || ""; } catch { /* ignore */ }
+        if (!msg) { try { msg = (await res.text()).slice(0, 300); } catch { /* ignore */ } }
+        throw new Error(msg || `Réponse serveur illisible (HTTP ${res.status})`);
+    }
+
+    // --- JSON simple (non-stream) ---
+    if (!contentType.includes("x-ndjson")) {
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || `Échec de la publication (HTTP ${res.status})`);
+        return json;
+    }
+
+    // --- Lecture NDJSON ---
+    onProgress(1, "Connexion au serveur… Publication lancée…");
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let lastPercent = 0;
+    let finalData = null;
+
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+                const evt = JSON.parse(line);
+                if (evt.percent !== undefined) lastPercent = evt.percent;
+                if (evt.message) {
+                    onProgress(evt.message, lastPercent, { step: evt.step, platform: evt.platform, state: evt.state });
+                }
+                if (evt.final) {
+                    finalData = evt.final;
+                }
+            } catch (e) {
+                console.warn("[Background Publish] Ligne NDJSON invalide :", line);
+            }
+        }
+    }
+
+    // Reste du buffer
+    if (buffer.trim()) {
+        try {
+            const evt = JSON.parse(buffer);
+            if (evt.final) finalData = evt.final;
+        } catch (e) { /* ignore */ }
+    }
+
+    return finalData || {};
+}
+
 /** Ajoute les métadonnées communes (titre, style, thème, artiste, userId) au FormData */
 function appendCommonMetadata(formData) {
     formData.append("stylePrompt", state.stylePrompt.trim());
@@ -1523,15 +1788,13 @@ async function performPublish() {
 
     try {
         // --- Mode fichier : tentative d'upload direct vers Vercel Blob ---
-        // (contourne la limite de 4,5 Mo des requêtes serverless)
         if (currentPublishMode === PUBLISH_MODE.FILE) {
             const file = $("publish-file-input").files[0];
             let blobUrl = null;
 
-            if (file) {
-                try {
-                    setPublishStatus({ type: "info", html: `Envoi du fichier vers le stockage cloud…` });
-                    blobUrl = await uploadFileViaBlob(file);
+                if (file) {
+                    try {
+                        blobUrl = await uploadFileViaBlob(file);
                     console.log("[Upload & Publier] Fichier stocké sur Blob :", blobUrl);
 
                     const fd = new FormData();
@@ -1540,11 +1803,8 @@ async function performPublish() {
                     sendBody = fd;
                 } catch (blobErr) {
                     console.warn("[Upload & Publier] Upload Blob indisponible :", blobErr.message);
-                    // Repli : envoi direct, mais refusé au-delà de ~4 Mo sur Vercel
                     if (file.size > 4 * 1024 * 1024) {
-                        // Dernière chance avant d'échouer : compression intégrée
                         try {
-                            setPublishStatus({ type: "info", html: "Fichier volumineux : compression intégrée en cours… (quelques secondes)" });
                             const { blob: compressed, kbps } = await compressAudioFile(file);
 
                             if (compressed.size > 4 * 1024 * 1024) {
@@ -1558,12 +1818,8 @@ async function performPublish() {
                             sendBody = fd;
                         } catch (cmpErr) {
                             console.warn("[Upload & Publier] Compression impossible :", cmpErr.message);
-                            const msg = `<span class="font-semibold">Fichier de ${(file.size / 1024 / 1024).toFixed(1)} Mo : dépasse la limite de 4,5 Mo de Vercel.</span><br>` +
-                                `Pour publier des fichiers de cette taille, activez gratuitement le stockage intégré :<br>` +
-                                `<span class="block mt-1">📊 Tableau de bord Vercel → votre projet → onglet « Storage » → « Create Database » → <b>Blob</b>. ` +
-                                `Le token est ajouté automatiquement, et les fichiers jusqu'à 100 Mo passeront.</span><br>` +
-                                `En attendant : utilisez un MP3 plus léger, ou le mode « Lien » avec une URL MP3 directe.`;
-                            setPublishStatus({ type: "error", html: msg });
+                            const msg = `Fichier de ${(file.size / 1024 / 1024).toFixed(1)} Mo dépasse la limite de 4,5 Mo de Vercel.`;
+                            setBackgroundPublishToastError(msg);
                             toast("Compression impossible : stockage cloud requis.", "error");
                             return;
                         }
@@ -1572,90 +1828,15 @@ async function performPublish() {
             }
         }
 
-        setPublishStatus({ type: "info", html: "Traitement en cours sur le serveur : génération pochette, encodage vidéo, publication Facebook & Instagram…<br><span class='text-xs opacity-75'>Cela peut prendre 1 à 3 minutes selon la taille du fichier. Ne fermez pas cette fenêtre.</span>" });
+        // Ferme la modale et lance en arrière-plan
+        startBackgroundPublish(sendBody);
 
-        const res = await fetch("/api/publish?progress=1", { method: "POST", headers: { "X-Publish-Stream": "1" }, body: sendBody });
-
-        // Barre de progression « étape par étape » : le serveur répond en flux
-        // NDJSON ; chaque événement met à jour la barre + le texte d'état en
-        // temps réel et le payload final remplace l'ancienne réponse JSON.
-        publishProgressBar(0, "Envoi des données au serveur…");
-        const data = await consumePublishProgressStream(res);
-
-        console.log("[Upload & Publier] Publication terminée :", data);
-
-        if (!res.ok) {
-            const detailLines = [];
-            if (data.error) detailLines.push(escapeHtml(data.error));
-            if (data.details) {
-                for (const [platform, msg] of Object.entries(data.details)) {
-                    if (msg) {
-                        detailLines.push(`<span class="font-semibold">${platform === "facebook" ? "📘 Facebook" : "📸 Instagram"} :</span> ${escapeHtml(msg)}`);
-                    }
-                }
-            }
-            const html = detailLines.join("<br>") || `Erreur serveur (HTTP ${res.status})`;
-            console.error("[Upload & Publier] Échec de la publication :", JSON.stringify(data, null, 2));
-            resetPublishProgress();
-            setPublishStatus({ type: "error", html });
-            toast(data.error || "Échec de la publication.", "error");
-            return;
-        }
-
-        // --- Succès (au moins une plateforme publiée) ---
-        const fbLine = data.facebook
-            ? `✅ <a href="${escapeHtml(data.facebook.url)}" target="_blank" rel="noopener" class="underline hover:text-emerald-100">Voir sur Facebook</a>`
-            : `⚠️ <span class="opacity-80">Facebook non publié${data.details?.facebook ? " — " + escapeHtml(data.details.facebook) : ""}</span>`;
-        let igLine;
-        if (data.instagram) {
-            igLine = `✅ <a href="${escapeHtml(data.instagram.url)}" target="_blank" rel="noopener" class="underline hover:text-emerald-100">Voir sur Instagram</a>`;
-        } else if (data.instagramPendingCreationId) {
-            // Le conteneur Reel est créé : Meta le traite encore (jusqu'à ~2 min)
-            const creationId = data.instagramPendingCreationId;
-            igLine = `⏳ <span id="ig-reel-status" class="opacity-90">Reel en traitement sur Instagram…</span>`;
-            finalizeInstagramReelPoll(creationId);
-        } else {
-            igLine = `⚠️ <span class="opacity-80">Instagram non publié${data.details?.instagram ? " — " + escapeHtml(data.details.instagram) : ""}</span>`;
-        }
-
-        const allOk = !!(data.facebook && data.instagram);
-        console.log(`[Upload & Publier] Publication terminée — Facebook: ${data.facebook ? "OK" : "KO"}, Instagram: ${data.instagram ? "OK" : "KO"}`);
-
-        setPublishStatus({
-            type: allOk ? "success" : "warning",
-            html: `<span class="font-bold">${allOk ? "Chanson publiée avec succès !" : "Publication partielle."}</span><br>` +
-                  `<span class="block mt-1">Facebook : ${fbLine}</span><br><span class="block">Instagram : ${igLine}</span>`
-        });
-        toast(allOk ? "🎉 Chanson publiée sur Facebook & Instagram !" : "⚠️ Publication partielle — voir la fenêtre.", allOk ? "success" : "warning");
-
-        // Sauvegarde pour la page « Published Tracks »
-        // audioUrl : version locale téléchargée par le serveur si possible
-        try {
-            savePublishedTrack({
-                title: getManualSongTitle() || ($("gen-theme") ? $("gen-theme").value.trim() : "") || "Track publié",
-                audioUrl: data.audioUrl || (currentPublishMode === PUBLISH_MODE.LINK ? $("publish-link-input").value.trim() : ""),
-                coverUrl: data.coverUrl || "/covers/cover_of_the_day.png",
-                videoUrl: data.videoUrl || null,
-                stylePrompt: state.stylePrompt.trim(),
-                artistUsed: getSelectedArtistName(),
-                blocks: state.blocks,
-                userId: getUserId()
-            });
-        } catch (saveErr) {
-            console.warn("[Published] Non-fatal save error:", saveErr.message);
-        }
     } catch (err) {
         console.error("[Upload & Publier] Erreur réseau/inattendue :", err);
-        resetPublishProgress();
-        setPublishStatus({
-            type: "error",
-            html: `<span class="font-bold">Échec de la publication.</span><br>${escapeHtml(err.message || "Erreur inconnue")}<br>
-                   <span class="text-xs opacity-75">Vérifiez que le serveur est démarré et consultez les logs du terminal.</span>`
-        });
+        setBackgroundPublishToastError(err.message || "Erreur inconnue");
         toast("Échec de la publication : " + (err.message || "erreur inconnue"), "error");
     } finally {
         isPublishing = false;
-        setPublishButtonState(false);
     }
 }
 

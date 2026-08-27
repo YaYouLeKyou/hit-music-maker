@@ -145,6 +145,16 @@ const AI_PROVIDERS = {
         name: "Groq",
         url: GROQ_API_URL,
         defaultModel: GROQ_MODEL,
+        models: [
+            { id: "openai/gpt-oss-120b", name: "GPT-OSS 120B (Open Source)" },
+            { id: "meta-llama/llama-4-scout-17b-16e-instruct", name: "Llama 4 Scout 17B" },
+            { id: "meta-llama/llama-4-maverick-17b-128e-instruct", name: "Llama 4 Maverick 17B" },
+            { id: "deepseek-r1-distill-llama-70b", name: "DeepSeek R1 Distill Llama 70B" },
+            { id: "qwen/qwen3-32b", name: "Qwen 3 32B" },
+            { id: "mistral-saba-24b", name: "Mistral Saba 24B" },
+            { id: "llama-3.3-70b-versatile", name: "Llama 3.3 70B Versatile" },
+            { id: "llama-3.1-8b-instant", name: "Llama 3.1 8B Instant" }
+        ],
         freeQuota: "~30 req/min, 6000 tokens/min",
         apiKeyEnv: "GROQ_API_KEY",
         docsUrl: "https://console.groq.com/keys",
@@ -154,6 +164,11 @@ const AI_PROVIDERS = {
         name: "Google Gemini",
         url: GEMINI_API_BASE,
         defaultModel: GEMINI_TEXT_MODEL,
+        models: [
+            { id: "gemini-1.5-flash", name: "Gemini 1.5 Flash (Fast, Free)" },
+            { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro (Advanced)" },
+            { id: "gemini-2.0-flash-exp", name: "Gemini 2.0 Flash Experimental" }
+        ],
         freeQuota: "60 req/min, 1500 req/day",
         apiKeyEnv: "GEMINI_API_KEY",
         docsUrl: "https://makersuite.google.com/app/apikey",
@@ -163,6 +178,15 @@ const AI_PROVIDERS = {
         name: "OpenRouter",
         url: OPENROUTER_API_URL,
         defaultModel: "meta-llama/llama-3.1-8b-instruct:free",
+        models: [
+            { id: "meta-llama/llama-3.1-8b-instruct:free", name: "Llama 3.1 8B Instruct (Free)" },
+            { id: "mistralai/mistral-7b-instruct:free", name: "Mistral 7B Instruct (Free)" },
+            { id: "google/gemma-2-9b-it:free", name: "Gemma 2 9B (Free)" },
+            { id: "qwen/qwen-2-7b-instruct:free", name: "Qwen 2 7B Instruct (Free)" },
+            { id: "meta-llama/llama-3.1-70b-instruct:free", name: "Llama 3.1 70B Instruct (Free)" },
+            { id: "openai/gpt-4o-mini", name: "GPT-4o Mini (Paid)" },
+            { id: "anthropic/claude-3.5-sonnet", name: "Claude 3.5 Sonnet (Paid)" }
+        ],
         freeQuota: "Modèles gratuits illimités (certains)",
         apiKeyEnv: "OPENROUTER_API_KEY",
         docsUrl: "https://openrouter.ai/keys",
@@ -172,6 +196,12 @@ const AI_PROVIDERS = {
         name: "Together AI",
         url: TOGETHER_API_URL,
         defaultModel: "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
+        models: [
+            { id: "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo", name: "Llama 3.1 8B Instruct Turbo" },
+            { id: "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo", name: "Llama 3.1 70B Instruct Turbo" },
+            { id: "mistralai/Mixtral-8x7B-Instruct-v0.1", name: "Mixtral 8x7B Instruct" },
+            { id: "Qwen/Qwen2-72B-Instruct", name: "Qwen 2 72B Instruct" }
+        ],
         freeQuota: "1M tokens gratuits à l'inscription",
         apiKeyEnv: "TOGETHER_API_KEY",
         docsUrl: "https://api.together.xyz/settings/api-keys",
@@ -181,6 +211,12 @@ const AI_PROVIDERS = {
         name: "Mistral AI",
         url: MISTRAL_API_URL,
         defaultModel: "mistral-small-latest",
+        models: [
+            { id: "mistral-small-latest", name: "Mistral Small (Latest)" },
+            { id: "mistral-medium-latest", name: "Mistral Medium (Latest)" },
+            { id: "mistral-large-latest", name: "Mistral Large (Latest)" },
+            { id: "open-mistral-7b", name: "Open Mistral 7B" }
+        ],
         freeQuota: "Gratuit avec quota journalier",
         apiKeyEnv: "MISTRAL_API_KEY",
         docsUrl: "https://console.mistral.ai/api-keys",
@@ -455,15 +491,48 @@ app.post("/api/generate", async (req, res) => {
             });
         } catch (providerErr) {
             console.warn(`[generate] Provider ${selectedProvider} échoué :`, providerErr.message);
+            
+            // Si c'est une erreur de quota côté serveur, renvoyer une erreur spécifique
+            if (providerErr.quotaExceeded && providerErr.serverKey) {
+                return res.status(429).json({
+                    error: `Quota ${providerConfig.name} du serveur épuisé. Veuillez ajouter votre propre clé API dans les paramètres de l'application.`,
+                    quotaExceeded: true,
+                    provider: selectedProvider,
+                    serverKey: true
+                });
+            }
+            
+            // Si c'est une erreur de quota avec la clé du client
+            if (providerErr.quotaExceeded) {
+                return res.status(429).json({
+                    error: `Votre quota ${providerConfig.name} est épuisé. Vérifiez votre tableau de bord provider.`,
+                    quotaExceeded: true,
+                    provider: selectedProvider,
+                    serverKey: false
+                });
+            }
+            
             // Fallback vers Gemini si disponible et que ce n'est pas déjà Gemini
             if (providerConfig.name !== "Google Gemini" && GEMINI_API_KEY) {
                 console.warn(`[generate] Fallback vers Gemini pour ${selectedProvider}`);
                 usedFallback = true;
-                rawContent = await callGemini({
-                    theme: typeof theme === "string" ? theme.trim() : "",
-                    artist,
-                    isAutoMode: Boolean(isAutoMode)
-                });
+                try {
+                    rawContent = await callGemini({
+                        theme: typeof theme === "string" ? theme.trim() : "",
+                        artist,
+                        isAutoMode: Boolean(isAutoMode)
+                    });
+                } catch (geminiErr) {
+                    if (geminiErr.quotaExceeded && !apiKey) {
+                        return res.status(429).json({
+                            error: `Quota ${providerConfig.name} du serveur épuisé. Veuillez ajouter votre propre clé API dans les paramètres de l'application.`,
+                            quotaExceeded: true,
+                            provider: selectedProvider,
+                            serverKey: true
+                        });
+                    }
+                    throw geminiErr;
+                }
             } else {
                 throw providerErr;
             }
@@ -602,7 +671,8 @@ app.get("/api/ai-providers", (req, res) => {
             freeQuota: config.freeQuota,
             docsUrl: config.docsUrl,
             hasServerKey,
-            defaultModel: config.defaultModel
+            defaultModel: config.defaultModel,
+            models: config.models || []
         };
     });
     res.json({ providers });
@@ -1120,11 +1190,25 @@ async function callOpenAICompatible({ theme, artist, isAutoMode, providerKey, ap
 
     if (!response.ok) {
         let detail = "";
+        let errorCode = "";
         try {
             const errBody = await response.json();
             detail = errBody?.error?.message || JSON.stringify(errBody);
+            errorCode = errBody?.error?.code || errBody?.error?.type || "";
         } catch (_) {
             detail = "";
+        }
+        // Détection des erreurs de quota/crédits (429, insufficient_quota, etc.)
+        const isQuotaError = response.status === 429
+            || /quota|credit|insufficient|rate.?limit|too.?many/i.test(detail)
+            || /quota|credit|insufficient|rate.?limit|too.?many/i.test(errorCode);
+        if (isQuotaError) {
+            const err = new Error(`Quota ${provider.name} épuisé : ${detail || "limite de taux dépassée"}`);
+            err.status = 429;
+            err.quotaExceeded = true;
+            err.provider = providerKey;
+            err.serverKey = !apiKey || apiKey === process.env[provider.apiKeyEnv];
+            throw err;
         }
         throw new Error(`Erreur API ${provider.name} (${response.status}) : ${detail || "réponse inattendue"}`);
     }
