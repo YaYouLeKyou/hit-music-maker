@@ -22,7 +22,7 @@ const STUDIO_PRESETS = [
     guitar:  { type: "Electric + Acoustic", role: "Rhythm + Lead" },
     keys:    { type: "Piano / Hammond" },
     vocals:  { style: "Harmonized lead", range: "Tenor", singerStyle1: "Rock / Pop", singerArtist1: "The Beatles" },
-    lyrics:  { language: "Anglais", structure: "intro, couplet-a, refrain, couplet-b, refrain, bridge, outro", theme: "Love, storytelling" },
+     lyrics:  { language: "en", structure: "intro, couplet-a, refrain, couplet-b, refrain, bridge, outro", theme: "Love, storytelling" },
     production: { atmosphere: "Warm / Vintage", reference: "60s Abbey Road", effects: ["reverb","tape"] },
     mixMode: false,
     extras: [
@@ -44,7 +44,7 @@ const STUDIO_PRESETS = [
     guitar:  { type: "Skank rhythm", role: "Offbeat" },
     keys:    { type: "Organ shuffle" },
     vocals:  { style: "Laid back", range: "Baritone", singerStyle1: "Reggae", singerArtist1: "Bob Marley" },
-    lyrics:  { language: "Anglais", structure: "intro, verse, refrain, verse, refrain, bridge, refrain, outro", theme: "Unity, resistance, love" },
+     lyrics:  { language: "en", structure: "intro, verse, refrain, verse, refrain, bridge, refrain, outro", theme: "Unity, resistance, love" },
     production: { atmosphere: "Warm / sunny", reference: "Exodus 1977", effects: ["reverb","delay"] },
     mixMode: false,
     extras: [
@@ -66,7 +66,7 @@ const STUDIO_PRESETS = [
     guitar:  { type: "Clean rhythm + Wah solo", role: "Rhythm + Lead" },
     keys:    { type: "Clavinet / Hohner" },
     vocals:  { style: "Soulful", range: "Tenor", singerStyle1: "Funk", singerArtist1: "Stevie Wonder" },
-    lyrics:  { language: "Anglais", structure: "intro, verse, refrain, verse, refrain, bridge, outro", theme: "Social consciousness, love" },
+     lyrics:  { language: "en", structure: "intro, verse, refrain, verse, refrain, bridge, outro", theme: "Social consciousness, love" },
     production: { atmosphere: "Warm / punchy", reference: "Superstition 1972", effects: ["reverb","phaser"] },
     mixMode: false,
     extras: [
@@ -88,7 +88,7 @@ const STUDIO_PRESETS = [
     guitar:  { type: "Distorted delay", role: "Lead melodic" },
     keys:    { type: "Minimal synth pad" },
     vocals:  { style: "Auto‑tune melodio", range: "Autotune", singerStyle1: "Drill", singerArtist1: "Gazo" },
-    lyrics:  { language: "Français", structure: "intro, couplet-a, refrain, couplet-b, refrain, bridge, refrain, outro", theme: "Street life" },
+     lyrics:  { language: "fr", structure: "intro, couplet-a, refrain, couplet-b, refrain, bridge, refrain, outro", theme: "Street life" },
     production: { atmosphere: "Dark / melancholic night", reference: "SoundCloud Drill 2024", effects: ["reverb","delay"] },
     mixMode: false,
     extras: [
@@ -110,7 +110,7 @@ const STUDIO_PRESETS = [
     guitar:  { type: "Distorted clean", role: "Side‑chained" },
     keys:    { type: "Side‑chained pads" },
     vocals:  { style: "Autotuned male", range: "Auto", singerStyle1: "Trap", singerArtist1: "Travis Scott" },
-    lyrics:  { language: "Anglais", structure: "intro, verse, refrain, verse, refrain, bridge, outro", theme: "Party, success, struggle" },
+     lyrics:  { language: "en", structure: "intro, verse, refrain, verse, refrain, bridge, outro", theme: "Party, success, struggle" },
     production: { atmosphere: "Dark / gritty", reference: "Astroworld 2018", effects: ["reverb","delay"] },
     mixMode: false,
     extras: [
@@ -132,7 +132,7 @@ const STUDIO_PRESETS = [
     guitar:  { type: "Analog delay", role: "Lead" },
     keys:    { type: "Synth pads" },
     vocals:  { style: "Vocal chops / pitch", range: "Auto", singerStyle1: "Synthwave", singerArtist1: "Kavinsky" },
-    lyrics:  { language: "Anglais", structure: "intro, verse, refrain, verse, refrain, bridge, outro", theme: "Retro futuristic, night drive" },
+     lyrics:  { language: "en", structure: "intro, verse, refrain, verse, refrain, bridge, outro", theme: "Retro futuristic, night drive" },
     production: { atmosphere: "Neon / cold", reference: "OutRun 2013", effects: ["delay","filter"] },
     mixMode: false,
     extras: [
@@ -154,7 +154,7 @@ const STUDIO_PRESETS = [
     guitar:  { type: "Jazz‑fusion", role: "Solo impressionniste" },
     keys:    { type: "Synth pads / organ" },
     vocals:  { style: "Chant traditionnel + flow", range: "Baritone", singerStyle1: "Afrobeat", singerArtist1: "Burna Boy" },
-    lyrics:  { language: "Anglais / Pidgin", structure: "intro, verse, refrain, verse, refrain, bridge, refrain, outro", theme: "African pride, diaspora" },
+     lyrics:  { language: "auto", structure: "intro, verse, refrain, verse, refrain, bridge, refrain, outro", theme: "African pride, diaspora" },
     production: { atmosphere: "Vibrant / festive", reference: "African Giant 2019", effects: ["reverb","delay"] },
     mixMode: false,
     extras: [
@@ -176,7 +176,7 @@ const STUDIO_PRESETS = [
     guitar:  { type: "Disco guitar chops", role: "Accent" },
     keys:    { type: "Piano chords / synth stabs" },
     vocals:  { style: "Disco pop", range: "Mezzo-soprano", singerStyle1: "Pop", singerArtist1: "Dua Lipa" },
-    lyrics:  { language: "Anglais", structure: "intro, verse, refrain, verse, refrain, bridge, refrain, outro", theme: "Love, dance, confidence" },
+     lyrics:  { language: "en", structure: "intro, verse, refrain, verse, refrain, bridge, refrain, outro", theme: "Love, dance, confidence" },
     production: { atmosphere: "Clean / clinical", reference: "Future Nostalgia 2020", effects: ["delay","filter"] },
     mixMode: false,
     extras: [
@@ -198,7 +198,7 @@ const STUDIO_PRESETS = [
     guitar:  { type: "Clean tone", role: "Rhythm" },
     keys:    { type: "Piano / Rhodes" },
     vocals:  { style: "Smooth soulful", range: "Baritone", singerStyle1: "Soul", singerArtist1: "Marvin Gaye" },
-    lyrics:  { language: "Anglais", structure: "intro, verse, refrain, verse, refrain, bridge, refrain, outro", theme: "Love, social issues" },
+     lyrics:  { language: "en", structure: "intro, verse, refrain, verse, refrain, bridge, refrain, outro", theme: "Love, social issues" },
     production: { atmosphere: "Analog / warm", reference: "What's Going On 1971", effects: ["reverb","tape"] },
     mixMode: false,
     extras: [
@@ -220,7 +220,7 @@ const STUDIO_PRESETS = [
     guitar:  { type: "Plectrum", role: "Solo impressionniste" },
     keys:    { type: "Piano comping" },
     vocals:  { style: "Scat + lyrics", range: "Baritone", singerStyle1: "Jazz", singerArtist1: "Miles Davis" },
-    lyrics:  { language: "Anglais", structure: "intro, verse, chorus, solo, outro", theme: "Improvisation" },
+     lyrics:  { language: "en", structure: "intro, verse, chorus, solo, outro", theme: "Improvisation" },
     production: { atmosphere: "Lounge / cool", reference: "Kind of Blue 1959", effects: ["reverb","delay"] },
     mixMode: false,
     extras: [
@@ -242,7 +242,7 @@ const STUDIO_PRESETS = [
     guitar:  { type: "Solo LEAD", role: "Epic" },
     keys:    { type: "Organ pads" },
     vocals:  { style: "Cryl", range: "Full", singerStyle1: "Metal", singerArtist1: "Metallica" },
-    lyrics:  { language: "Anglais", structure: "intro, verse, refrain, solo, bridge, outro", theme: "Rites, rebellion" },
+     lyrics:  { language: "en", structure: "intro, verse, refrain, solo, bridge, outro", theme: "Rites, rebellion" },
     production: { atmosphere: "Aggressive / violent", reference: "Master of Puppets 1986", effects: ["reverb","delay"] },
     mixMode: false,
     extras: [
@@ -264,7 +264,7 @@ const STUDIO_PRESETS = [
     guitar:  { type: "Harpe / Celesta", role: "Color" },
     keys:    { type: "Piano / Celesta" },
     vocals:  { style: "Operatic / Choir", range: "Full", singerStyle1: "Classique", singerArtist1: "" },
-    lyrics:  { language: "Latin / Allemand", structure: "intro, exposition, development, recapitulation, outro", theme: "Epic, dramatic" },
+     lyrics:  { language: "auto", structure: "intro, exposition, development, recapitulation, outro", theme: "Epic, dramatic" },
     production: { atmosphere: "Grand / cathedral", reference: "Berlin Philharmonic", effects: ["reverb","hall"] },
     mixMode: false,
     extras: [
@@ -288,7 +288,7 @@ const STUDIO_PRESETS = [
     guitar:  { type: "Harp", role: "Arpèges" },
     keys:    { type: "Piano / Pipe organ" },
     vocals:  { style: "Bel canto", range: "Full opera", singerStyle1: "Opéra", singerArtist1: "" },
-    lyrics:  { language: "Italien / Français", structure: "recitative, aria, duet, finale", theme: "Tragedy, love, destiny" },
+     lyrics:  { language: "auto", structure: "recitative, aria, duet, finale", theme: "Tragedy, love, destiny" },
     production: { atmosphere: "Theatrical / hall", reference: "La Scala Milan", effects: ["reverb","hall"] },
     mixMode: false,
     extras: [

@@ -141,13 +141,15 @@ function cleanAiBlockText(text, blockType) {
     return out;
 }
 
-module.exports = {
-    LYRICS_SKELETON_DEFAULT,
-    splitStructureTokens,
-    toCanonicalLyricsType,
-    buildLyricsSkeletonFromStructure,
-    cleanAiBlockText
-};
+if (typeof module !== "undefined" && module.exports) {
+    module.exports = {
+        LYRICS_SKELETON_DEFAULT,
+        splitStructureTokens,
+        toCanonicalLyricsType,
+        buildLyricsSkeletonFromStructure,
+        cleanAiBlockText
+    };
+}
 
 // Export navigateur (chargé avant studio-pro.js)
 if (typeof window !== "undefined") {

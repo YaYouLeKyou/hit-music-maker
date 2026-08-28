@@ -16,6 +16,7 @@ const rateLimit = require("express-rate-limit");
 
 const { ARTISTS_DATABASE } = require("./public/artistes_presets.js");
 const { buildLyricsLanguageBlock, normalizeBlockTypes } = require("./lyrics_language.js");
+const { extractJson } = require("./extract_json.js");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -433,6 +434,8 @@ function buildSystemPrompt({ theme, artist, isAutoMode, mixData }) {
         "3. COVER PROMPT : Génère un prompt visuel en ANGLAIS décrivant l'ambiance, les couleurs,",
         "   le style artistique et l'atmosphère de la pochette d'album (ex: neon cityscape, dark synthwave...).",
         "4. TITRE DE LA CHANSON : Génère un titre court, mémorable et poétique qui capture l'essence du thème.",
+        "5. JSON STRICT : Chaque texte de bloc doit être un JSON valide. ÉCHAPPE toujours les guillemets",
+        "   internes dans les chaînes (ex : \\\" notation). Ne coupe jamais une chaîne ou un tableau en cours de route.",
         "",
         "Réponds STRICTEMENT sous forme d'objet JSON valide (sans texte hors du JSON) :",
         "{",
@@ -455,6 +458,15 @@ function buildSystemPrompt({ theme, artist, isAutoMode, mixData }) {
 app.post("/api/generate", async (req, res) => {
     try {
         const { apiKey: clientKey, provider, theme, targetArtist, isAutoMode, userId, mixData } = req.body || {};
+
+        console.log("[generate] Request:", {
+            provider,
+            theme: typeof theme === "string" ? theme.slice(0, 80) : "",
+            targetArtist,
+            isAutoMode: Boolean(isAutoMode),
+            hasClientKey: !!clientKey,
+            mixData: mixData ? { styles: mixData.mixStyles, artists: mixData.mixArtists } : null
+        });
 
         // Priorité à la clé du client (localStorage), sinon fallback sur le .env du serveur
         const apiKey = clientKey && typeof clientKey === "string" && clientKey.trim().length >= 10
@@ -514,40 +526,52 @@ app.post("/api/generate", async (req, res) => {
         let rawContent = null;
         let usedFallback = false;
 
+        console.log("[generate] Appel AI:", {
+            provider: selectedProvider,
+            artist: artist ? artist.name : "none",
+            isAutoMode: Boolean(isAutoMode),
+            theme: theme.slice(0, 60)
+        });
+
+        /**
+         * Petite attente avant une seule nouvelle tentative : utile quand
+         * l'API fournit un délai de reset (retry-after / x-ratelimit-reset).
+         */
+        const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+        const callArgs = () => ({
+            theme: typeof theme === "string" ? theme.trim() : "",
+            artist,
+            isAutoMode: Boolean(isAutoMode),
+            provider: selectedProvider,
+            apiKey: effectiveApiKey,
+            mixData
+        });
+
+        const attemptProvider = () => callAIProvider(callArgs());
+
+        // 1) Tentative principale sur le provider demandé
         try {
-            rawContent = await callAIProvider({
-                theme: typeof theme === "string" ? theme.trim() : "",
-                artist,
-                isAutoMode: Boolean(isAutoMode),
-                provider: selectedProvider,
-                apiKey: effectiveApiKey,
-                mixData
-            });
+            rawContent = await attemptProvider();
+            console.log("[generate] Réponse brute reçue (premiers 200 chars):", String(rawContent).slice(0, 200));
         } catch (providerErr) {
             console.warn(`[generate] Provider ${selectedProvider} échoué :`, providerErr.message);
-            
-            // Si c'est une erreur de quota côté serveur, renvoyer une erreur spécifique
-            if (providerErr.quotaExceeded && providerErr.serverKey) {
-                return res.status(429).json({
-                    error: `Quota ${providerConfig.name} du serveur épuisé. Veuillez ajouter votre propre clé API dans les paramètres de l'application.`,
-                    quotaExceeded: true,
-                    provider: selectedProvider,
-                    serverKey: true
-                });
+
+            // 1a) Rate-limit : attendre puis retenter UNE seule fois quand l'API
+            //     fournit un délai (retry-after / x-ratelimit-reset).
+            if (providerErr.quotaExceeded && providerErr.retryAfterMs) {
+                const waitMs = Math.min(providerErr.retryAfterMs, 15000);
+                console.warn(`[generate] Rate-limit ${selectedProvider} — attente ${Math.round(waitMs / 1000)}s puis nouvelle tentative…`);
+                await sleep(waitMs);
+                try {
+                    rawContent = await attemptProvider();
+                } catch (retryErr) {
+                    console.warn(`[generate] Nouvelle tentative ${selectedProvider} échouée :`, retryErr.message);
+                    providerErr = retryErr;
+                }
             }
-            
-            // Si c'est une erreur de quota avec la clé du client
-            if (providerErr.quotaExceeded) {
-                return res.status(429).json({
-                    error: `Votre quota ${providerConfig.name} est épuisé. Vérifiez votre tableau de bord provider.`,
-                    quotaExceeded: true,
-                    provider: selectedProvider,
-                    serverKey: false
-                });
-            }
-            
-            // Fallback vers Gemini si disponible et que ce n'est pas déjà Gemini
-            if (providerConfig.name !== "Google Gemini" && GEMINI_API_KEY) {
+
+            // 1b) Toujours en échec → fallback Gemini (si pas déjà Gemini)
+            if (!rawContent && providerConfig.name !== "Google Gemini" && GEMINI_API_KEY) {
                 console.warn(`[generate] Fallback vers Gemini pour ${selectedProvider}`);
                 usedFallback = true;
                 try {
@@ -558,35 +582,57 @@ app.post("/api/generate", async (req, res) => {
                         mixData
                     });
                 } catch (geminiErr) {
-                    if (geminiErr.quotaExceeded && !apiKey) {
-                        return res.status(429).json({
-                            error: `Quota ${providerConfig.name} du serveur épuisé. Veuillez ajouter votre propre clé API dans les paramètres de l'application.`,
-                            quotaExceeded: true,
-                            provider: selectedProvider,
-                            serverKey: true
-                        });
-                    }
-                    throw geminiErr;
+                    console.warn(`[generate] Fallback Gemini échoué :`, geminiErr.message);
+                    if (!rawContent) throw geminiErr;
                 }
-            } else {
-                throw providerErr;
             }
+
+            if (!rawContent) throw providerErr;
         }
 
         // Extraction robuste du JSON (gère les balises markdown éventuelles)
         let parsed;
         try {
             parsed = extractJson(rawContent);
+            console.log("[generate] JSON extrait:", {
+                hasGeneratedTheme: !!parsed.generatedTheme,
+                hasArtistUsed: !!parsed.artistUsed,
+                hasStylePrompt: !!parsed.stylePrompt,
+                hasCoverPrompt: !!parsed.coverPrompt,
+                blocksCount: Array.isArray(parsed.blocks) ? parsed.blocks.length : "not array",
+                firstBlock: Array.isArray(parsed.blocks) && parsed.blocks[0] ? parsed.blocks[0] : null
+            });
         } catch (parseErr) {
             console.error("[generate] Échec parsing JSON :", parseErr.message);
-            return res.status(502).json({
-                error: "Impossible d'extraire un JSON valide de la réponse du modèle.",
-                raw: (rawContent || "").slice(0, 2000)
-            });
+            console.error("[generate] Raw content (premiers 500 chars):", String(rawContent).slice(0, 500));
+            // Si le JSON renvoyé par le provider est inexploitable, on tente une
+            // dernière fois de récupérer la chanson via le fallback Gemini avant
+            // de renvoyer une erreur (évite les "échecs silencieux" côté studio).
+            if (providerConfig.name !== "Google Gemini" && GEMINI_API_KEY) {
+                console.warn("[generate] JSON invalide — nouvelle tentative via Gemini…");
+                try {
+                    rawContent = await callGemini({
+                        theme: typeof theme === "string" ? theme.trim() : "",
+                        artist,
+                        isAutoMode: Boolean(isAutoMode),
+                        mixData
+                    });
+                    parsed = extractJson(rawContent);
+                } catch (geminiErr) {
+                    console.error("[generate] Fallback Gemini (après JSON invalide) échoué :", geminiErr.message);
+                }
+            }
+            if (!parsed) {
+                return res.status(502).json({
+                    error: "Impossible d'extraire un JSON valide de la réponse du modèle.",
+                    raw: (rawContent || "").slice(0, 2000)
+                });
+            }
         }
 
         // Normalisation de la réponse
         const result = {
+            usedFallback,
             generatedTheme: typeof parsed.generatedTheme === "string" ? parsed.generatedTheme : "",
             artistUsed: typeof parsed.artistUsed === "string" && parsed.artistUsed
                 ? parsed.artistUsed
@@ -605,6 +651,14 @@ app.post("/api/generate", async (req, res) => {
                 return normalizeBlockTypes(clean, artist);
             })()
         };
+
+        console.log("[generate] Réponse OK:", {
+            usedFallback: result.usedFallback,
+            artistUsed: result.artistUsed,
+            generatedTheme: result.generatedTheme,
+            blocksCount: result.blocks.length,
+            firstBlock: result.blocks[0] || null
+        });
 
         res.json(result);
     } catch (err) {
@@ -1137,20 +1191,11 @@ app.post("/api/upload-url", async (req, res) => {
 });
 
 /**
- * Extrait le premier objet JSON valide d'une chaîne,
- * en ignorant les balises markdown ```json ... ``` et le texte autour.
+ * Appelle l'API Gemini en mode texte (fallback LLM).
+ * Utilise GEMINI_TEXT_MODEL par défaut ; si ce modèle est invalide/retraité
+ * (ex. « gemini-3.6-flash »), réessaie automatiquement avec les modèles de
+ * secours listés dans AI_PROVIDERS.gemini, tant qu'il reste des candidats.
  */
-function extractJson(text) {
-    const cleaned = text.replace(/```(?:json)?/gi, "").trim();
-    const start = cleaned.indexOf("{");
-    const end = cleaned.lastIndexOf("}");
-    if (start === -1 || end === -1 || end <= start) {
-        throw new Error("Aucun objet JSON trouvé dans la réponse.");
-    }
-    return JSON.parse(cleaned.slice(start, end + 1));
-}
-
-/** Appelle l'API Gemini en mode texte (fallback LLM). */
 async function callGemini({ theme, artist, isAutoMode, mixData }) {
     const systemPrompt = buildSystemPrompt({ theme, artist, isAutoMode, mixData });
     const userInstruction = [
@@ -1159,35 +1204,70 @@ async function callGemini({ theme, artist, isAutoMode, mixData }) {
     ].join("\n");
     const combinedPrompt = systemPrompt + "\n\n" + userInstruction;
 
-    const url = `${GEMINI_API_BASE}/${GEMINI_TEXT_MODEL}:generateContent`;
-    const response = await fetch(url, {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            "x-goog-api-key": GEMINI_API_KEY
-        },
-        body: JSON.stringify({
-            contents: [{ parts: [{ text: combinedPrompt }] }],
-            generationConfig: { temperature: 0.9, responseMimeType: "application/json" }
-        })
-    });
+    // Candidats par ordre de préférence : le modèle configuré, puis les
+    // modèles de secours connus valides (flash, pas pro, pour le quota).
+    const fallbackModels = (AI_PROVIDERS.gemini && AI_PROVIDERS.gemini.models || [])
+        .map((m) => m.id);
+    const candidates = Array.from(new Set([
+        GEMINI_TEXT_MODEL,
+        ...fallbackModels,
+        "gemini-1.5-flash",
+        "gemini-2.0-flash-exp"
+    ]));
 
-    if (!response.ok) {
-        let detail = "";
+    let lastError = null;
+    for (const model of candidates) {
         try {
-            const errBody = await response.json();
-            detail = errBody?.error?.message || JSON.stringify(errBody);
-        } catch (_) {
-            detail = "";
-        }
-        throw new Error(`Erreur API Gemini (${response.status}) : ${detail || "réponse inattendue"}`);
-    }
+            const url = `${GEMINI_API_BASE}/${model}:generateContent`;
+            const response = await fetch(url, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "x-goog-api-key": GEMINI_API_KEY
+                },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: combinedPrompt }] }],
+                    generationConfig: { temperature: 0.9, responseMimeType: "application/json" }
+                })
+            });
 
-    const data = await response.json();
-    const parts = data?.candidates?.[0]?.content?.parts || [];
-    const text = parts.map((p) => p.text || "").join("").trim();
-    if (!text) throw new Error("Réponse vide de l'API Gemini.");
-    return text;
+            if (!response.ok) {
+                let detail = "";
+                try {
+                    const errBody = await response.json();
+                    detail = errBody?.error?.message || JSON.stringify(errBody);
+                } catch (_) {
+                    detail = "";
+                }
+                const msg = `Erreur API Gemini (${response.status}) : ${detail || "réponse inattendue"}`;
+                // 400/403 = modèle introuvable/désactivé : on essaye le suivant.
+                // 429 = quota : inutile d'essayer les autres modèles, on sort tout de suite.
+                if (response.status === 429) {
+                    const err = new Error(`Quota Gemini épuisé : ${detail}`);
+                    err.status = 429;
+                    err.quotaExceeded = true;
+                    err.serverKey = true;
+                    throw err;
+                }
+                if (model !== candidates[candidates.length - 1]) {
+                    console.warn(`[generate] ${msg} — essai du modèle de secours suivant…`);
+                    lastError = new Error(msg);
+                    continue;
+                }
+                throw new Error(msg);
+            }
+
+            const data = await response.json();
+            const parts = data?.candidates?.[0]?.content?.parts || [];
+            const text = parts.map((p) => p.text || "").join("").trim();
+            if (!text) throw new Error("Réponse vide de l'API Gemini.");
+            return text;
+        } catch (err) {
+            if (err && err.quotaExceeded) throw err;
+            lastError = err || lastError;
+        }
+    }
+    throw lastError || new Error("Aucun modèle Gemini n'a répondu correctement.");
 }
 
 /**
@@ -1204,54 +1284,80 @@ async function callOpenAICompatible({ theme, artist, isAutoMode, providerKey, ap
     ].join("\n");
 
     const url = provider.url;
-    const response = await fetch(url, {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${apiKey}`,
-            "HTTP-Referer": "https://music-hit-maker.com",
-            "X-Title": "Music Hit Maker Studio"
-        },
-        body: JSON.stringify({
-            model: model || provider.defaultModel,
-            temperature: 0.9,
-            max_tokens: 4096,
-            messages: [
-                { role: "system", content: systemPrompt },
-                { role: "user", content: userInstruction }
-            ]
-        })
-    });
 
-    if (!response.ok) {
+    // La réponse JSON de la chanson complète (7+ sections de paroles + style +
+    // cover prompt) dépasse souvent 4096 tokens. On demande 8192 par défaut et
+    // si le modèle refuse (max_tokens trop élevé), on retombe sur 4096.
+    const maxTokensAttempts = [8192, 4096];
+    let lastErr = null;
+    for (const maxTokens of maxTokensAttempts) {
+        let response;
+        try {
+            response = await fetch(url, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${apiKey}`,
+                    "HTTP-Referer": "https://music-hit-maker.com",
+                    "X-Title": "Music Hit Maker Studio"
+                },
+                body: JSON.stringify({
+                    model: model || provider.defaultModel,
+                    temperature: 0.9,
+                    max_tokens: maxTokens,
+                    messages: [
+                        { role: "system", content: systemPrompt },
+                        { role: "user", content: userInstruction }
+                    ]
+                })
+            });
+        } catch (fetchErr) {
+            throw new Error(`Réponse réseau impossible via ${provider.name} : ${fetchErr.message}`);
+        }
+
         let detail = "";
         let errorCode = "";
-        try {
-            const errBody = await response.json();
-            detail = errBody?.error?.message || JSON.stringify(errBody);
-            errorCode = errBody?.error?.code || errBody?.error?.type || "";
-        } catch (_) {
-            detail = "";
+        if (!response.ok) {
+            try {
+                const errBody = await response.json();
+                detail = errBody?.error?.message || JSON.stringify(errBody);
+                errorCode = errBody?.error?.code || errBody?.error?.type || "";
+            } catch (_) {
+                detail = "";
+            }
+            // En-têtes de rate-limit utiles pour un retry avec backoff
+            const retryAfter = parseFloat(response.headers.get("retry-after"));
+            const resetHeader = parseFloat(response.headers.get("x-ratelimit-reset") || response.headers.get("x-ratelimit-reset-requests"));
+            let waitMs = 0;
+            if (Number.isFinite(retryAfter) && retryAfter > 0) waitMs = retryAfter * 1000;
+            else if (Number.isFinite(resetHeader) && resetHeader > 0) waitMs = Math.max(1000, resetHeader - Date.now());
+            // Détection des erreurs de quota/crédits (429, insufficient_quota, etc.)
+            const isQuotaError = response.status === 429
+                || /quota|credit|insufficient|rate.?limit|too.?many/i.test(detail)
+                || /quota|credit|insufficient|rate.?limit|too.?many/i.test(errorCode);
+            if (isQuotaError) {
+                const err = new Error(`Quota ${provider.name} épuisé : ${detail || "limite de taux dépassée"}`);
+                err.status = 429;
+                err.quotaExceeded = true;
+                err.provider = providerKey;
+                err.serverKey = !apiKey || apiKey === process.env[provider.apiKeyEnv];
+                if (waitMs > 0) err.retryAfterMs = waitMs;
+                throw err;
+            }
+            // Erreur "max_tokens" : on réessaie avec une limite plus basse
+            if (/max.?tokens|maximum context|context length/i.test(detail)) {
+                lastErr = new Error(`Erreur API ${provider.name} (${response.status}) : ${detail || "max_tokens refusé"}`);
+                continue;
+            }
+            throw new Error(`Erreur API ${provider.name} (${response.status}) : ${detail || "réponse inattendue"}`);
         }
-        // Détection des erreurs de quota/crédits (429, insufficient_quota, etc.)
-        const isQuotaError = response.status === 429
-            || /quota|credit|insufficient|rate.?limit|too.?many/i.test(detail)
-            || /quota|credit|insufficient|rate.?limit|too.?many/i.test(errorCode);
-        if (isQuotaError) {
-            const err = new Error(`Quota ${provider.name} épuisé : ${detail || "limite de taux dépassée"}`);
-            err.status = 429;
-            err.quotaExceeded = true;
-            err.provider = providerKey;
-            err.serverKey = !apiKey || apiKey === process.env[provider.apiKeyEnv];
-            throw err;
-        }
-        throw new Error(`Erreur API ${provider.name} (${response.status}) : ${detail || "réponse inattendue"}`);
-    }
 
-    const data = await response.json();
-    const content = data?.choices?.[0]?.message?.content;
-    if (!content) throw new Error(`Réponse vide de l'API ${provider.name}.`);
-    return content;
+        const data = await response.json();
+        const content = data?.choices?.[0]?.message?.content;
+        if (!content) throw new Error(`Réponse vide de l'API ${provider.name}.`);
+        return content;
+    }
+    throw lastErr || new Error(`Erreur API ${provider.name} pour la génération.`);
 }
 
 /**

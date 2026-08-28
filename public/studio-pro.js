@@ -1115,7 +1115,12 @@ function initLyricsBlocks() {
     // Génération IA des paroles (artiste + thème du modèle appliqué)
     const aiBtn = $("btn-lyrics-ai");
     if (aiBtn) {
-        aiBtn.addEventListener("click", generateLyricsWithAi);
+        aiBtn.addEventListener("click", () => generateLyricsWithAi(false));
+    }
+
+    const autoBtn = $("btn-lyrics-auto");
+    if (autoBtn) {
+        autoBtn.addEventListener("click", () => generateLyricsWithAi(true));
     }
 
     // Délégation d'événements pour les cartes de blocs
@@ -1167,59 +1172,140 @@ function initLyricsBlocks() {
  * ES selon la langue de l'artiste) sont normalisés vers les types canoniques
  * FR de Studio Pro, puis injectés dans les blocs lyrics et le prompt final.
  */
-async function generateLyricsWithAi() {
+async function generateLyricsWithAi(isAutoMode = false) {
     if (state.instrumentalOnly) {
         toast("Mode instrumental activé : les paroles sont désactivées.", "warning");
         return;
     }
     const btn = $("btn-lyrics-ai");
     const originalHtml = btn ? btn.innerHTML : "";
+    const statusEl = $("lyrics-gen-status");
+
+    const setStatus = (html, type) => {
+        if (!statusEl) return;
+        statusEl.classList.remove("hidden");
+        const colors = {
+            info: "border-amber-800/40 bg-amber-900/10 text-amber-200",
+            success: "border-emerald-800/40 bg-emerald-900/10 text-emerald-200",
+            error: "border-red-800/40 bg-red-900/10 text-red-200"
+        };
+        statusEl.className = "mt-3 rounded-lg border p-3 text-xs " + (colors[type] || colors.info);
+        statusEl.innerHTML = html;
+    };
+
     if (btn) {
         btn.disabled = true;
         btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i>Écriture…';
     }
+    setStatus("<i class='fa-solid fa-spinner fa-spin mr-1'></i> Interrogation de l'IA…", "info");
+
     try {
         const provider = ($("provider-select") && $("provider-select").value) || "groq";
-        const theme = String(state.lyricsTheme || "").trim()
+        const theme = isAutoMode ? "" : String(state.lyricsTheme || "").trim()
             || `Chanson ${state.style || "originale"}${state.artist ? " dans l'esprit de " + state.artist : ""}`;
+        const targetArtist = isAutoMode ? "" : (state.artist || "");
+
+        const body = {
+            theme: isAutoMode ? "" : theme,
+            targetArtist: isAutoMode ? "" : targetArtist,
+            isAutoMode: Boolean(isAutoMode),
+            provider
+        };
+
+        console.log("[StudioPro][Lyrics] Request body:", body);
+
         const res = await fetch("/api/generate", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                theme,
-                targetArtist: state.artist || "",
-                isAutoMode: false,
-                provider
-            })
+            body: JSON.stringify(body)
         });
-        const data = await res.json();
+
+        console.log("[StudioPro][Lyrics] Response status:", res.status, res.statusText);
+
         if (!res.ok) {
-            throw new Error(data.error || `Erreur serveur (${res.status})`);
+            const errText = await res.text().catch(() => "");
+            console.error("[StudioPro][Lyrics] Error response body:", errText);
+            throw new Error(`Erreur serveur (${res.status}): ${errText.slice(0, 200) || res.statusText}`);
         }
-        if (typeof LyricsStructure === "undefined") {
-            throw new Error("Module lyrics_structure.js non chargé — rechargez la page (Ctrl+F5).");
+
+        const data = await res.json();
+        console.log("[StudioPro][Lyrics] Response data:", JSON.stringify(data, null, 2));
+
+        const rawBlocks = Array.isArray(data.blocks) ? data.blocks : [];
+        console.log("[StudioPro][Lyrics] Raw blocks count:", rawBlocks.length);
+        if (rawBlocks.length) {
+            console.log("[StudioPro][Lyrics] First raw block:", JSON.stringify(rawBlocks[0], null, 2));
         }
-        const counters = { verse: 0 };
-        const blocks = (Array.isArray(data.blocks) ? data.blocks : [])
-            .map((b) => ({
-                type: LyricsStructure.toCanonicalLyricsType(b && b.type, counters, { fallbackRaw: true }) || "Couplet 1",
-                text: LyricsStructure.cleanAiBlockText(b && b.text, b && b.type)
-            }))
-            .filter((b) => b.text);
+
+        if (statusEl) {
+            const info = [];
+            info.push(`<strong>Réponse serveur :</strong> ${rawBlocks.length} blocs reçus`);
+            if (rawBlocks.length) {
+                const sample = rawBlocks[0];
+                const textPreview = sample && typeof sample.text === "string" ? sample.text.slice(0, 80) : "(vide)";
+                info.push(`<br><strong>1er bloc :</strong> [${escapeHtml(sample && sample.type || "?")}] ${escapeHtml(textPreview)}…`);
+            }
+            if (data.artistUsed) info.push(`<br><strong>Artiste :</strong> ${escapeHtml(data.artistUsed)}`);
+            if (data.generatedTheme) info.push(`<br><strong>Thème :</strong> ${escapeHtml(data.generatedTheme)}`);
+            setStatus(info.join(""), "info");
+        }
+
+        if (isAutoMode) {
+            if (data.artistUsed && !state.artist) state.artist = data.artistUsed;
+            if (data.generatedTheme && !String(state.lyricsTheme || "").trim()) {
+                state.lyricsTheme = data.generatedTheme;
+                const themeEl = $("lyrics-theme");
+                if (themeEl) themeEl.value = state.lyricsTheme;
+            }
+            const artistEl = $("artist-display");
+            if (artistEl && data.artistUsed) artistEl.textContent = data.artistUsed;
+        }
+
+        let blocks = rawBlocks;
+
+        if (typeof LyricsStructure !== "undefined") {
+            const counters = { verse: 0 };
+            blocks = rawBlocks
+                .map((b) => ({
+                    type: LyricsStructure.toCanonicalLyricsType(b && b.type, counters, { fallbackRaw: true }) || "Couplet 1",
+                    text: LyricsStructure.cleanAiBlockText(b && b.text, b && b.type)
+                }))
+                .filter((b) => b.text);
+            console.log("[StudioPro][Lyrics] Blocks after LyricsStructure:", blocks.length);
+        } else if (rawBlocks.length) {
+            blocks = rawBlocks.filter((b) => b && typeof b.text === "string" && b.text.trim());
+            console.log("[StudioPro][Lyrics] Blocks after basic filter:", blocks.length);
+        }
+
+        console.log("[StudioPro][Lyrics] Final blocks count:", blocks.length);
+        if (!blocks.length && rawBlocks.length) {
+            console.warn("[StudioPro][Lyrics] All blocks empty after processing. Raw sample:", JSON.stringify(rawBlocks.slice(0, 2), null, 2));
+        }
+
         if (!blocks.length) {
             throw new Error("Le modèle n'a renvoyé aucune parole exploitable. Réessayez.");
         }
+
         state.lyricsBlocks = blocks;
         if (!String(state.lyricsTheme || "").trim() && data.generatedTheme) {
             state.lyricsTheme = data.generatedTheme;
             const themeEl = $("lyrics-theme");
             if (themeEl) themeEl.value = state.lyricsTheme;
         }
+
         renderLyricsBlocks();
         updateLyricsPreview();
         saveState();
-        toast(`Paroles générées : ${blocks.length} sections 🎤`, "success");
+        state.finalPrompt = assemblePrompt();
+        const finalPromptEl = $("final-prompt");
+        if (finalPromptEl) finalPromptEl.value = state.finalPrompt;
+        const statusEl2 = $("prompt-status");
+        if (statusEl2) statusEl2.textContent = `Prompt assemblé automatiquement (${state.finalPrompt.length} caractères) — vous pouvez encore modifier les paroles, puis cliquer sur Assembler pour mettre à jour.`;
+        setStatus(`<i class='fa-solid fa-circle-check mr-1'></i> Paroles générées : ${blocks.length} sections 🎤`, "success");
+        toast(`Paroles générées : ${blocks.length} sections 🎤 — Prompt final mis à jour.`, "success");
     } catch (err) {
+        console.error("[StudioPro][Lyrics] Error:", err);
+        setStatus(`<i class='fa-solid fa-circle-xmark mr-1'></i> ${escapeHtml(err.message || "Échec de la génération des paroles.")}`, "error");
         toast(err.message || "Échec de la génération des paroles.", "error");
     } finally {
         if (btn) {
@@ -1931,6 +2017,236 @@ function init() {
     const btnResetInstruments = $("btn-reset-instruments");
     if (btnResetInstruments) {
         btnResetInstruments.addEventListener("click", resetInstrumentCards);
+    }
+
+    // ============================================================
+    // Studio Pro : flux de publication (Publier en direct / Upload & Publier)
+    // ============================================================
+    const btnGenerateMusic = $("btn-generate-music");
+    if (btnGenerateMusic) {
+        btnGenerateMusic.addEventListener("click", async () => {
+            if (state.instrumentalOnly) {
+                toast("Mode instrumental : pas de publication vocale.", "warning");
+                return;
+            }
+            const originalHtml = btnGenerateMusic.innerHTML;
+            btnGenerateMusic.disabled = true;
+            btnGenerateMusic.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i>Préparation…';
+            try {
+                state.finalPrompt = assemblePrompt();
+                const finalPromptEl = $("final-prompt");
+                if (finalPromptEl) finalPromptEl.value = state.finalPrompt;
+                const lyrics = buildLyricsFromBlocks(true) || state.lyricsText || "";
+                const theme = state.lyricsTheme || state.style || "";
+                const artistUsed = state.artist || "Artiste Polyvalent";
+                const title = String(theme || "Sans titre").slice(0, 80);
+                const res = await fetch("/api/stripe/checkout", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        title,
+                        stylePrompt: state.finalPrompt,
+                        lyrics,
+                        theme,
+                        artistUsed
+                    })
+                });
+                const data = await res.json().catch(() => null);
+                if (!res.ok || !data?.url) {
+                    throw new Error(data?.error || `HTTP ${res.status}`);
+                }
+                window.location.href = data.url;
+            } catch (err) {
+                toast("Échec de la préparation : " + err.message, "error");
+                btnGenerateMusic.disabled = false;
+                btnGenerateMusic.innerHTML = originalHtml;
+            }
+        });
+    }
+
+    const btnUploadPublish = $("btn-upload-publish");
+    if (btnUploadPublish) {
+        btnUploadPublish.addEventListener("click", () => {
+            state.finalPrompt = assemblePrompt();
+            const finalPromptEl = $("final-prompt");
+            if (finalPromptEl) finalPromptEl.value = state.finalPrompt;
+            openStudioProPublishModal();
+        });
+    }
+
+    function openStudioProPublishModal() {
+        const modal = $("modal-publish");
+        if (!modal) return;
+        modal.classList.remove("hidden");
+        document.body.style.overflow = "hidden";
+        setStudioProPublishMode("link");
+        setStudioProPublishStatus(null);
+        const coverPromptEl = $("publish-cover-prompt");
+        if (coverPromptEl && state.finalPrompt) {
+            coverPromptEl.value = state.finalPrompt.slice(0, 500);
+        }
+    }
+
+    function closeStudioProPublishModal() {
+        const modal = $("modal-publish");
+        if (!modal) return;
+        modal.classList.add("hidden");
+        document.body.style.overflow = "";
+    }
+
+    function setStudioProPublishMode(mode) {
+        const isLink = mode === "link";
+        const linkSection = $("publish-link-section");
+        const fileSection = $("publish-file-section");
+        const linkBtn = $("publish-mode-link");
+        const fileBtn = $("publish-mode-file");
+        if (linkSection) linkSection.classList.toggle("hidden", !isLink);
+        if (fileSection) fileSection.classList.toggle("hidden", isLink);
+        if (linkBtn) {
+            linkBtn.className = isLink
+                ? "px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 bg-gradient-to-r from-orange-600 to-red-600 text-white shadow-md shadow-orange-600/25"
+                : "px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/70 bg-white/5 text-slate-300 hover:bg-white/10";
+        }
+        if (fileBtn) {
+            fileBtn.className = !isLink
+                ? "px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 bg-gradient-to-r from-orange-600 to-red-600 text-white shadow-md shadow-orange-600/25"
+                : "px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/70 bg-white/5 text-slate-300 hover:bg-white/10";
+        }
+    }
+
+    function setStudioProPublishStatus(status) {
+        const box = $("publish-status");
+        if (!box) return;
+        if (!status) {
+            box.classList.add("hidden");
+            box.innerHTML = "";
+            return;
+        }
+        const styles = {
+            info: "border-fuchsia-600/50 bg-fuchsia-500/10 text-purple-200",
+            success: "border-emerald-500/60 bg-emerald-500/10 text-emerald-200",
+            warning: "border-amber-500/60 bg-amber-500/10 text-amber-100",
+            error: "border-red-500/60 bg-red-500/10 text-red-200"
+        };
+        const icons = {
+            info: "fa-compact-disc fa-spin",
+            success: "fa-circle-check",
+            warning: "fa-triangle-exclamation",
+            error: "fa-circle-xmark"
+        };
+        box.className = "mt-4 rounded-xl border p-4 text-sm animate-fadeIn " + (styles[status.type] || styles.info);
+        box.innerHTML = `<p><i class="fa-solid ${icons[status.type] || icons.info} mr-2"></i>${escapeHtml(status.html)}</p>`;
+    }
+
+    const btnPublishClose = $("btn-publish-close");
+    if (btnPublishClose) {
+        btnPublishClose.addEventListener("click", closeStudioProPublishModal);
+    }
+
+    const btnPublishCancel = $("btn-publish-cancel");
+    if (btnPublishCancel) {
+        btnPublishCancel.addEventListener("click", closeStudioProPublishModal);
+    }
+
+    const publishModeLink = $("publish-mode-link");
+    const publishModeFile = $("publish-mode-file");
+    if (publishModeLink) {
+        publishModeLink.addEventListener("click", () => setStudioProPublishMode("link"));
+    }
+    if (publishModeFile) {
+        publishModeFile.addEventListener("click", () => setStudioProPublishMode("file"));
+    }
+
+    const btnPublishConfirm = $("btn-publish-confirm");
+    if (btnPublishConfirm) {
+        btnPublishConfirm.addEventListener("click", async () => {
+            const linkInput = $("publish-link-input");
+            const fileInput = $("publish-file-input");
+            const coverPrompt = ($("publish-cover-prompt") && $("publish-cover-prompt").value.trim()) || state.finalPrompt || "";
+            const caption = ($("publish-caption") && $("publish-caption").value.trim()) || "";
+            const audioUrl = linkInput ? linkInput.value.trim() : "";
+            const file = fileInput ? fileInput.files[0] : null;
+
+            if (!audioUrl && !file) {
+                setStudioProPublishStatus({ type: "warning", html: "Fournissez un lien audio ou un fichier MP3." });
+                return;
+            }
+
+            btnPublishConfirm.disabled = true;
+            btnPublishConfirm.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i>Publication…';
+            setStudioProPublishStatus({ type: "info", html: "Publication en cours…" });
+
+            try {
+                const formData = new FormData();
+                formData.append("stylePrompt", state.finalPrompt || "");
+                formData.append("coverPrompt", coverPrompt);
+                formData.append("theme", state.lyricsTheme || state.style || "");
+                formData.append("songTitle", String(state.lyricsTheme || state.style || "Sans titre").slice(0, 80));
+                formData.append("artistUsed", state.artist || "Artiste Polyvalent");
+                formData.append("caption", caption);
+                if (audioUrl) formData.append("audioUrl", audioUrl);
+                if (file) formData.append("file", file);
+
+                const res = await fetch("/api/publish?progress=1", {
+                    method: "POST",
+                    body: formData
+                });
+
+                const contentType = res.headers.get("content-type") || "";
+                if (!res.ok && !contentType.includes("x-ndjson")) {
+                    const msg = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+                    throw new Error(msg.error || "Échec de la publication");
+                }
+
+                if (contentType.includes("x-ndjson")) {
+                    const reader = res.body.getReader();
+                    const decoder = new TextDecoder();
+                    let buffer = "";
+                    let lastEvent = null;
+                    while (true) {
+                        const chunk = await reader.read();
+                        if (chunk.done) break;
+                        buffer += decoder.decode(chunk.value, { stream: true });
+                        const lines = buffer.split("\n");
+                        buffer = lines.pop() || "";
+                        for (const line of lines) {
+                            const trimmed = line.trim();
+                            if (!trimmed) continue;
+                            let evt = null;
+                            try { evt = JSON.parse(trimmed); } catch { continue; }
+                            lastEvent = evt;
+                            if (evt.type === "error") {
+                                throw new Error(evt.error || evt.message || "Publication échouée");
+                            }
+                            if (evt.message) {
+                                setStudioProPublishStatus({ type: "info", html: evt.message });
+                            }
+                        }
+                    }
+                    if (lastEvent && lastEvent.type === "done") {
+                        setStudioProPublishStatus({ type: "success", html: "Publication terminée avec succès !" });
+                        toast("Publication réussie ! 🎵", "success");
+                        closeStudioProPublishModal();
+                    } else if (lastEvent && lastEvent.type === "error") {
+                        throw new Error(lastEvent.error || lastEvent.message || "Publication échouée");
+                    } else {
+                        throw new Error("Réponse inattendue du serveur.");
+                    }
+                } else {
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.error || "Échec de la publication");
+                    setStudioProPublishStatus({ type: "success", html: "Publication terminée !" });
+                    toast("Publication réussie ! 🎵", "success");
+                    closeStudioProPublishModal();
+                }
+            } catch (err) {
+                setStudioProPublishStatus({ type: "error", html: err.message || "Erreur during publication" });
+                toast("Échec de la publication : " + err.message, "error");
+            } finally {
+                btnPublishConfirm.disabled = false;
+                btnPublishConfirm.innerHTML = '<i class="fa-solid fa-paper-plane mr-1"></i>Publier';
+            }
+        });
     }
 }
 

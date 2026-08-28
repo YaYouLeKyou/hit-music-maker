@@ -37,6 +37,7 @@ const { ARTISTS_DATABASE } = require("./public/artistes_presets.js");
 const { buildLyricsLanguageBlock, normalizeBlockTypes } = require("./lyrics_language.js");
 const { publishToAllSocial } = require("./social_publisher.js");
 const { generateFallbackCover } = require("./cover_fallback.js");
+const { extractJson } = require("./extract_json.js");
 
 // --- Configuration Suno / Udio (génération musicale) ---
 const SUNO_API_KEY = process.env.SUNO_API_KEY || "";
@@ -150,17 +151,6 @@ const USER_INSTRUCTION = [
     "Génère la chanson complète conformément aux instructions du système.",
     "Réponds UNIQUEMENT avec l'objet JSON valide, sans texte autour, sans balises markdown."
 ].join(NL);
-
-/** Extrait le premier objet JSON valide d'une réponse LLM (gère ```json … ```) */
-function extractJson(text) {
-    const cleaned = text.replace(/```(?:json)?/gi, "").trim();
-    const start = cleaned.indexOf("{");
-    const end = cleaned.lastIndexOf("}");
-    if (start === -1 || end === -1 || end <= start) {
-        throw new Error("Aucun objet JSON trouvé dans la réponse du modèle.");
-    }
-    return JSON.parse(cleaned.slice(start, end + 1));
-}
 
 // ============================================================
 // Génération LLM : Groq (principal) -> Gemini (fallback)

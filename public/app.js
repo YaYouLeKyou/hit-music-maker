@@ -605,11 +605,35 @@ async function generateWithGroq(isAutoMode = false) {
 
     hideGenError();
     hideGenInfo();
+    resetGenProgress();
     btn.disabled = true;
     btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>Composition…';
     btn.classList.add("generating");
 
+    setGenProgress(10, "Préparation de la requête…");
+
+    let progressTimer = null;
+    let currentProgress = 10;
+
+    const startProgressSimulation = () => {
+        if (progressTimer) return;
+        progressTimer = setInterval(() => {
+            if (currentProgress < 85) {
+                currentProgress += Math.random() * 8 + 2;
+                currentProgress = Math.min(currentProgress, 85);
+                setGenProgress(currentProgress, "Génération en cours via l'IA…");
+            }
+        }, 800);
+    };
+
+    const stopProgressSimulation = () => {
+        if (progressTimer) { clearInterval(progressTimer); progressTimer = null; }
+    };
+
     try {
+        startProgressSimulation();
+        setGenProgress(20, "Interrogation de l'IA…");
+
         const res = await fetch("/api/generate", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -621,6 +645,9 @@ async function generateWithGroq(isAutoMode = false) {
                 mixData: mixData || undefined
             })
         });
+
+        stopProgressSimulation();
+        setGenProgress(90, "Traitement de la réponse…");
 
         const data = await res.json();
 
@@ -646,16 +673,21 @@ async function generateWithGroq(isAutoMode = false) {
         renderBlocks();
         updatePreview();
 
+        setGenProgress(100, "Composition générée !");
+
         // Affiche le thème généré et l'artiste utilisé
         showGenInfo(data.generatedTheme, data.artistUsed, isAutoMode);
         toast("Composition générée avec succès ! 🎵");
     } catch (err) {
+        stopProgressSimulation();
+        resetGenProgress();
         showGenError(err.message || "Échec de la génération.");
         toast("Échec de la génération IA.", "error");
     } finally {
         btn.disabled = false;
         btn.innerHTML = originalHtml;
         btn.classList.remove("generating");
+        setTimeout(() => { if (currentProgress >= 100) resetGenProgress(); }, 2000);
     }
 }
 
@@ -684,6 +716,23 @@ function showGenError(msg) {
 
 function hideGenError() {
     $("gen-error").classList.add("hidden");
+}
+
+function setGenProgress(percent, text) {
+    const wrap = $("gen-progress");
+    const bar = $("gen-progress-bar");
+    const pctEl = $("gen-progress-pct");
+    const txtEl = $("gen-progress-text");
+    if (!wrap || !bar) return;
+    const p = Math.max(0, Math.min(100, Math.round(Number(percent) || 0)));
+    bar.style.width = p + "%";
+    if (pctEl) pctEl.textContent = p + " %";
+    if (txtEl && text) txtEl.textContent = text;
+    wrap.classList.toggle("hidden", p <= 0 && !text);
+}
+
+function resetGenProgress() {
+    setGenProgress(0, "");
 }
 
 // ============================================================

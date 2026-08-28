@@ -353,13 +353,16 @@
                         </button>
                     </div>
 
-                    <!-- Explication des deux modes de génération -->
-                    <p class="text-xs text-slate-500 mt-3 leading-relaxed">
-                        <i class="fa-solid fa-bolt text-fuchsia-400 mr-1"></i><span class="font-semibold text-slate-400">Générer</span>
-                        compose à partir du thème et de l'artiste que vous avez choisis ci-dessus.
-                        <i class="fa-solid fa-wand-sparkles text-pink-400 ml-2 mr-1"></i><span class="font-semibold text-slate-400">Création Auto</span>
-                        invente un thème profond et tire un artiste au hasard parmi les 36 profils de la BDD Studio.
-                    </p>
+                    <!-- Barre de progression génération IA -->
+                    <div id="gen-progress" class="hidden mt-3">
+                        <div class="flex items-center justify-between mb-1">
+                            <span id="gen-progress-text" class="text-xs text-slate-300">Génération en cours…</span>
+                            <span id="gen-progress-pct" class="text-xs font-mono text-fuchsia-400">0%</span>
+                        </div>
+                        <div class="h-2 w-full rounded-full bg-purple-950/80 border border-purple-800/50 overflow-hidden">
+                            <div id="gen-progress-bar" class="h-full w-0 rounded-full bg-gradient-to-r from-fuchsia-500 via-purple-500 to-pink-500 transition-all duration-500 ease-out"></div>
+                        </div>
+                    </div>
 
                     <!-- Info thème/artiste générés -->
                     <div id="gen-info" class="hidden mt-3 rounded-lg bg-purple-500/10 border border-purple-500/40 text-purple-200 text-xs p-3"></div>
