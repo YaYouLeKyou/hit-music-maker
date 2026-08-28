@@ -215,6 +215,13 @@
                     </select>
                 </div>
             </div>
+
+            <div class="mt-4 flex items-center gap-3">
+                <button id="btn-auto-configure" type="button" class="px-4 py-2 rounded-lg bg-fuchsia-600 hover:bg-fuchsia-500 text-white text-sm font-semibold transition shadow-md shadow-fuchsia-600/25">
+                    <i class="fa-solid fa-wand-magic-sparkles mr-1"></i>Configurer auto
+                </button>
+                <span class="text-xs text-gray-400">Applique automatiquement tous les réglages selon le style / l'artiste / le mix sélectionné.</span>
+            </div>
         </section>
 
         <!-- Prompt Builders -->
@@ -428,6 +435,11 @@
                     <i class="fa-solid fa-microphone text-red-400 mr-2"></i>Chant & Vocal
                 </h3>
                 <div class="space-y-4">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" id="instrumental-only" class="w-4 h-4 rounded border-purple-700 bg-[#0f0f1a] text-fuchsia-500 focus:ring-fuchsia-500">
+                        <span class="text-sm font-semibold text-gray-200">Instrumental uniquement</span>
+                    </label>
+                    <div id="vocal-controls">
                     <div>
                         <label class="block text-xs font-medium text-gray-400 mb-1">Style vocal</label>
                         <select id="vocal-style" class="w-full rounded-lg bg-[#0f0f1a] border border-purple-800/70 px-3 py-2 text-sm">
@@ -470,6 +482,7 @@
                             </select>
                         </div>
                     </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -477,7 +490,7 @@
         <!-- Lyrics & Production -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <!-- Lyrics -->
-            <div class="bg-[#1a1a2e] rounded-xl border border-purple-800/50 p-6">
+            <div id="lyrics-section" class="bg-[#1a1a2e] rounded-xl border border-purple-800/50 p-6">
                 <h3 class="text-md font-bold mb-4 text-gray-200">
                     <i class="fa-solid fa-pen-fancy text-amber-400 mr-2"></i>Paroles
                 </h3>

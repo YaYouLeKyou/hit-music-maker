@@ -15,6 +15,7 @@ let state = {
     config: "solo",
     style: "",
     artist: "",
+    instrumentalOnly: false,
     drumStyle: "",
     drumKit: "",
     drumBpm: 120,
@@ -140,11 +141,18 @@ function applyPresetToState(preset) {
     if (preset.keys) {
         state.keysType = preset.keys.type;
     }
-    if (preset.vocals) {
+    if (!state.instrumentalOnly && preset.vocals) {
         state.vocalStyle = preset.vocals.style;
         state.vocalRange = preset.vocals.range;
         if (preset.vocals.singerStyle1) state.singerStyle1 = preset.vocals.singerStyle1;
         if (preset.vocals.singerArtist1) state.singerArtist1 = preset.vocals.singerArtist1;
+    } else if (state.instrumentalOnly) {
+        state.vocalStyle = "";
+        state.vocalRange = "auto";
+        state.singerStyle1 = "";
+        state.singerStyle2 = "";
+        state.singerArtist1 = "";
+        state.singerArtist2 = "";
     }
     if (preset.lyrics) {
         state.lyricsLanguage = preset.lyrics.language;
@@ -158,8 +166,9 @@ function applyPresetToState(preset) {
     }
     if (preset.mixMode !== undefined) state.mixMode = preset.mixMode;
     saveState();
-    updateUIFromState();
-    toast(`Configuration appliquée : ${preset.label}`, "success");
+    syncUiFromState();
+    const label = preset.label ? `Configuration appliquée : ${preset.label}` : "Configuration appliquée";
+    toast(label, "success");
 }
 
 function applyMixProfiles(presetA, presetB, ratio = 0.5) {
@@ -212,7 +221,7 @@ function applyMixProfiles(presetA, presetB, ratio = 0.5) {
     }
 
     saveState();
-    updateUIFromState();
+    syncUiFromState();
     toast(`Profil mixé appliqué : ${a.label} ↔ ${b.label}`, "info");
 }
 
@@ -223,7 +232,7 @@ function initPresetChipsAndSelect() {
     chips.forEach(chip => {
         chip.addEventListener("click", () => {
             const presetId = chip.dataset.preset;
-            const preset = ALL_PRESETS.find(p => p.id === presetId);
+            const preset = window.ARTIST_PRESETS.find(p => p.id === presetId);
             if (preset) applyPresetToState(preset);
         });
     });
@@ -232,7 +241,7 @@ function initPresetChipsAndSelect() {
         artistSelect.addEventListener("change", () => {
             const presetId = artistSelect.value;
             if (!presetId) return;
-            const preset = ALL_PRESETS.find(p => p.id === presetId);
+            const preset = window.ARTIST_PRESETS.find(p => p.id === presetId);
             if (preset) applyPresetToState(preset);
         });
     }
@@ -256,8 +265,213 @@ async function loadStudioPresets() {
 }
 
 // ============================================================
-// Peuplement des sélecteurs dynamiques
+//  Auto-configuration intelligente
 // ============================================================
+
+function findBestPresetMatch(style, artist) {
+    const all = window.ARTIST_PRESETS || [];
+    const s = (style || "").toLowerCase().trim();
+    const a = (artist || "").toLowerCase().trim();
+    if (!s && !a) return null;
+
+    const exact = all.find(p =>
+        (s && p.style && p.style.toLowerCase() === s) ||
+        (a && p.artist && p.artist.toLowerCase() === a)
+    );
+    if (exact) return exact;
+
+    const partial = all.find(p =>
+        (s && p.style && p.style.toLowerCase().includes(s)) ||
+        (a && p.artist && p.artist.toLowerCase().includes(a))
+    );
+    if (partial) return partial;
+
+    return null;
+}
+
+function generateDefaultsFromConfig(style, artist) {
+    const s = (style || "").toLowerCase();
+    const defaults = {
+        config: "solo",
+        style: style,
+        artist: artist,
+        drums: {
+            style: "Modern drum kit",
+            kit: "808",
+            bpm: 120,
+            groove: "Straight",
+            fills: false
+        },
+        harmony: {
+            key: "C",
+            mode: "major",
+            progression: "I–V–vi–IV",
+            voicing: "Close"
+        },
+        bass: {
+            style: "Modern bass",
+            role: "Groove",
+            character: "Warm"
+        },
+        guitar: {
+            type: "Electric",
+            role: "Rhythm"
+        },
+        keys: {
+            type: "Pads"
+        },
+        vocals: {
+            style: "Melodic",
+            range: "Auto",
+            singerStyle1: style,
+            singerArtist1: artist
+        },
+        lyrics: {
+            language: "Français",
+            structure: "Verse / Refrain",
+            theme: ""
+        },
+        production: {
+            atmosphere: "Standard",
+            reference: style || "Standard",
+            effects: ["reverb", "delay"]
+        },
+        mixMode: false
+    };
+
+    if (s.includes("hip-hop") || s.includes("trap") || s.includes("drill")) {
+        defaults.drums = { style: "808 kit, ghost snares, fast hi-hats", kit: "808", bpm: 140, groove: "Straight", fills: true };
+        defaults.harmony = { key: "C#", mode: "minor", progression: "Dark loop", voicing: "Minimal" };
+        defaults.bass = { style: "808 sub", role: "Pulsant", character: "Darker" };
+        defaults.vocals = { style: "Auto-tune melodio", range: "Auto", singerStyle1: "Hip-Hop", singerArtist1: artist };
+        defaults.production = { atmosphere: "Dark / Moody", reference: "Hip-Hop / Trap", effects: ["reverb", "delay"] };
+    } else if (s.includes("rock")) {
+        defaults.drums = { style: "Live drum kit", kit: "Acoustic", bpm: 128, groove: "Straight", fills: true };
+        defaults.harmony = { key: "E", mode: "minor", progression: "Power chords", voicing: "Open" };
+        defaults.bass = { style: "Pick bass", role: "Groove", character: "Aggressive" };
+        defaults.guitar = { type: "Electric distorted", role: "Lead + Rhythm" };
+        defaults.vocals = { style: "Powerful", range: "Full", singerStyle1: "Rock", singerArtist1: artist };
+        defaults.production = { atmosphere: "Warm / Aggressive", reference: "Rock", effects: ["reverb", "distortion"] };
+    } else if (s.includes("jazz")) {
+        defaults.drums = { style: "Brush kit", kit: "Acoustic", bpm: 110, groove: "Swing", fills: false };
+        defaults.harmony = { key: "Bb", mode: "major", progression: "ii-V-I", voicing: "Extended" };
+        defaults.bass = { style: "Upright walking", role: "Melodic", character: "Smooth" };
+        defaults.guitar = { type: "Jazz guitar clean", role: "Solo" };
+        defaults.vocals = { style: "Smooth jazz scat", range: "Baritone", singerStyle1: "Jazz", singerArtist1: artist };
+        defaults.production = { atmosphere: "Lounge / warm", reference: "Jazz", effects: ["reverb"] };
+    } else if (s.includes("electro") || s.includes("electronic")) {
+        defaults.drums = { style: "Electronic drum machine", kit: "Electronic", bpm: 128, groove: "Straight", fills: false };
+        defaults.harmony = { key: "D", mode: "minor", progression: "Arpeggiated", voicing: "Synth" };
+        defaults.bass = { style: "Synthesized bass", role: "Lead", character: "Sharp" };
+        defaults.keys = { type: "Synth lead" };
+        defaults.vocals = { style: "Vocoder / chopped", range: "Digital", singerStyle1: "Electronic", singerArtist1: artist };
+        defaults.production = { atmosphere: "Clean / digital", reference: "Electronic", effects: ["delay", "filter"] };
+    } else if (s.includes("reggae")) {
+        defaults.drums = { style: "One drop", kit: "Acoustic", bpm: 76, groove: "Reggae", fills: false };
+        defaults.harmony = { key: "G", mode: "major", progression: "One drop", voicing: "Loose" };
+        defaults.bass = { style: "Thick bass", role: "Groove", character: "Round" };
+        defaults.guitar = { type: "Skank rhythm", role: "Offbeat" };
+        defaults.vocals = { style: "Laid back", range: "Baritone", singerStyle1: "Reggae", singerArtist1: artist };
+        defaults.production = { atmosphere: "Warm / sunny", reference: "Reggae", effects: ["reverb", "delay"] };
+    } else if (s.includes("jazz")) {
+        defaults.drums = { style: "Brush kit", kit: "Acoustic", bpm: 110, groove: "Swing", fills: false };
+        defaults.harmony = { key: "Bb", mode: "major", progression: "ii-V-I", voicing: "Extended" };
+        defaults.bass = { style: "Upright walking", role: "Melodic", character: "Smooth" };
+        defaults.guitar = { type: "Jazz guitar clean", role: "Solo" };
+        defaults.vocals = { style: "Smooth jazz scat", range: "Baritone", singerStyle1: "Jazz", singerArtist1: artist };
+        defaults.production = { atmosphere: "Lounge / warm", reference: "Jazz", effects: ["reverb"] };
+    } else if (s.includes("afrobeat")) {
+        defaults.drums = { style: "Djembe, dunun, percussions", kit: "Acoustic", bpm: 108, groove: "Afro groove", fills: true };
+        defaults.harmony = { key: "Gb", mode: "minor", progression: "Cyclique", voicing: "Collective" };
+        defaults.bass = { style: "Percussive bass", role: "Swing", character: "Round" };
+        defaults.guitar = { type: "Jazz-fusion", role: "Solo" };
+        defaults.vocals = { style: "Chant traditionnel + flow", range: "Baritone", singerStyle1: "Afrobeat", singerArtist1: artist };
+        defaults.production = { atmosphere: "Vibrant / festive", reference: "Afrobeat", effects: ["reverb", "delay"] };
+    } else if (s.includes("metal")) {
+        defaults.drums = { style: "Double bass, blast beats", kit: "Acoustic", bpm: 180, groove: "Aggressive", fills: true };
+        defaults.harmony = { key: "Db", mode: "minor", progression: "Riff-based", voicing: "Distorted" };
+        defaults.bass = { style: "Power chord bass", role: "Anchor", character: "Heavy" };
+        defaults.guitar = { type: "Distorted lead", role: "Epic solo" };
+        defaults.vocals = { style: "Screaming / growling", range: "Full", singerStyle1: "Metal", singerArtist1: artist };
+        defaults.production = { atmosphere: "Aggressive / violent", reference: "Metal", effects: ["reverb", "distortion"] };
+    }
+
+    if (state.instrumentalOnly) {
+        defaults.vocals = { style: "", range: "auto", singerStyle1: "", singerArtist1: "" };
+        defaults.lyrics = { language: "Français", structure: "Verse / Refrain", theme: "" };
+    }
+
+    return defaults;
+}
+
+function handleAutoConfigure() {
+    const style = state.style;
+    const artist = state.artist;
+    const mixMode = state.mixMode;
+    const mixStyles = state.mixStyles || [];
+    const mixArtists = state.mixArtists || [];
+
+    if (!style && !artist) {
+        toast("Sélectionnez d'abord un style ou un artiste.", "warning");
+        return;
+    }
+
+    if (mixMode && mixStyles.length >= 2) {
+        const presetA = findBestPresetMatch(mixStyles[0], mixArtists[0] || artist);
+        const presetB = findBestPresetMatch(mixStyles[1], mixArtists[1] || artist);
+        if (presetA && presetB) {
+            applyMixProfiles(presetA, presetB, 0.5);
+            toast("Configuration automatique appliquée (Mode Mix)", "success");
+            return;
+        }
+    }
+
+    const preset = findBestPresetMatch(style, artist);
+    if (preset) {
+        applyPresetToState(preset);
+        toast(`Configuration automatique appliquée : ${preset.label}`, "success");
+        if (state.instrumentalOnly) {
+            state.vocalStyle = "";
+            state.vocalRange = "auto";
+            state.singerStyle1 = "";
+            state.singerStyle2 = "";
+            state.singerArtist1 = "";
+            state.singerArtist2 = "";
+            state.lyricsLanguage = "fr";
+            state.lyricsStructure = "auto";
+            state.lyricsTheme = "";
+            state.lyricsText = "";
+            const vocalControls = $("vocal-controls");
+            const lyricsSection = $("lyrics-section");
+            if (vocalControls) vocalControls.classList.add("hidden");
+            if (lyricsSection) lyricsSection.classList.add("hidden");
+            syncUiFromState();
+        }
+        return;
+    }
+
+    const defaults = generateDefaultsFromConfig(style, artist);
+    applyPresetToState(defaults);
+    toast("Configuration automatique appliquée (par défaut)", "success");
+    if (state.instrumentalOnly) {
+        state.vocalStyle = "";
+        state.vocalRange = "auto";
+        state.singerStyle1 = "";
+        state.singerStyle2 = "";
+        state.singerArtist1 = "";
+        state.singerArtist2 = "";
+        state.lyricsLanguage = "fr";
+        state.lyricsStructure = "auto";
+        state.lyricsTheme = "";
+        state.lyricsText = "";
+        const vocalControls = $("vocal-controls");
+        const lyricsSection = $("lyrics-section");
+        if (vocalControls) vocalControls.classList.add("hidden");
+        if (lyricsSection) lyricsSection.classList.add("hidden");
+        syncUiFromState();
+    }
+}
+
 
 function populateStyleSelect() {
     const select = $("style-select");
@@ -553,6 +767,12 @@ function syncUiFromState() {
     setVal("mix-artist-3", state.mixArtists[2] || "");
 
     setVal("final-prompt", state.finalPrompt);
+
+    setChecked("instrumental-only", state.instrumentalOnly);
+    const vocalControls = $("vocal-controls");
+    const lyricsSection = $("lyrics-section");
+    if (vocalControls) vocalControls.classList.toggle("hidden", state.instrumentalOnly);
+    if (lyricsSection) lyricsSection.classList.toggle("hidden", state.instrumentalOnly);
 }
 
 // ============================================================
@@ -837,6 +1057,31 @@ function init() {
     bind("singer-artist-1", "singerArtist1");
     bind("singer-artist-2", "singerArtist2");
 
+    const instrumentalToggle = $("instrumental-only");
+    const vocalControls = $("vocal-controls");
+    const lyricsSection = $("lyrics-section");
+    if (instrumentalToggle) {
+        instrumentalToggle.addEventListener("change", (e) => {
+            state.instrumentalOnly = e.target.checked;
+            if (vocalControls) vocalControls.classList.toggle("hidden", state.instrumentalOnly);
+            if (lyricsSection) lyricsSection.classList.toggle("hidden", state.instrumentalOnly);
+            if (state.instrumentalOnly) {
+                state.vocalStyle = "";
+                state.vocalRange = "auto";
+                state.singerStyle1 = "";
+                state.singerStyle2 = "";
+                state.singerArtist1 = "";
+                state.singerArtist2 = "";
+                state.lyricsLanguage = "fr";
+                state.lyricsStructure = "auto";
+                state.lyricsTheme = "";
+                state.lyricsText = "";
+                syncUiFromState();
+            }
+            saveState();
+        });
+    }
+
     // Lyrics
     bind("lyrics-language", "lyricsLanguage");
     bind("lyrics-structure", "lyricsStructure");
@@ -954,6 +1199,12 @@ function init() {
                 panel.classList.add("hidden");
             }
         });
+    }
+
+    // Auto Configure
+    const btnAutoConfigure = $("btn-auto-configure");
+    if (btnAutoConfigure) {
+        btnAutoConfigure.addEventListener("click", handleAutoConfigure);
     }
 }
 
