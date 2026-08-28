@@ -275,6 +275,39 @@
                     <input id="artist-custom" type="text" placeholder="Ex : MC Éclipse, Laora, …"
                         class="w-full rounded-lg bg-night border border-purple-800/70 p-3 text-sm outline-none transition-colors duration-200 placeholder:text-slate-500 focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/30">
 
+                    <!-- Mode Mix -->
+                    <div class="mt-4 rounded-xl border border-purple-800/60 bg-purple-900/20 p-4">
+                        <label class="flex items-center gap-2 cursor-pointer mb-3">
+                            <input type="checkbox" id="mix-mode-toggle" class="w-4 h-4 rounded border-purple-700 bg-night text-fuchsia-500 focus:ring-fuchsia-500">
+                            <span class="text-sm font-semibold text-slate-200"><i class="fa-solid fa-shuffle mr-1 text-fuchsia-400"></i>Mode Mix</span>
+                        </label>
+                        <p class="text-xs text-slate-400 mb-3">Sélectionnez 2 à 3 styles et 2 à 3 artistes. L'IA mélangera les genres, les thèmes et les références pour créer un titre hybride original.</p>
+
+                        <div id="mix-style-group" class="hidden space-y-2 mb-3">
+                            <label class="block text-xs font-medium text-slate-300">Styles additionnels</label>
+                            <select id="mix-style-2"
+                                class="w-full rounded-lg bg-night border border-purple-800/70 px-3 py-2 text-sm outline-none transition-colors duration-200 focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/30 cursor-pointer">
+                                <option value="">— Style 2 —</option>
+                            </select>
+                            <select id="mix-style-3"
+                                class="w-full rounded-lg bg-night border border-purple-800/70 px-3 py-2 text-sm outline-none transition-colors duration-200 focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/30 cursor-pointer">
+                                <option value="">— Style 3 (optionnel) —</option>
+                            </select>
+                        </div>
+
+                        <div id="mix-artist-group" class="hidden space-y-2">
+                            <label class="block text-xs font-medium text-slate-300">Artistes additionnels</label>
+                            <select id="mix-artist-2"
+                                class="w-full rounded-lg bg-night border border-purple-800/70 px-3 py-2 text-sm outline-none transition-colors duration-200 focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/30 cursor-pointer">
+                                <option value="">— Artiste 2 —</option>
+                            </select>
+                            <select id="mix-artist-3"
+                                class="w-full rounded-lg bg-night border border-purple-800/70 px-3 py-2 text-sm outline-none transition-colors duration-200 focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/30 cursor-pointer">
+                                <option value="">— Artiste 3 (optionnel) —</option>
+                            </select>
+                        </div>
+                    </div>
+
                     <!-- 3. Titre (auto-généré par IA, modifiable manuellement, avec refresh) -->
                     <label for="gen-title" class="block text-sm font-medium text-slate-300 mt-4 mb-1">3. Titre de la chanson</label>
                     <div class="flex items-center gap-2">

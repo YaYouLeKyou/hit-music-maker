@@ -571,6 +571,7 @@ async function generateWithGroq(isAutoMode = false) {
     const targetArtist = customArtist || ($("artist-style") ? $("artist-style").value : "");
     const styleLibre = $("gen-style").value.trim();
     const provider = $("provider-select") ? $("provider-select").value : "groq";
+    const mixData = getMixData();
 
     // Le style libre est fusionné dans le thème s'il est renseigné
     if (!isAutoMode && styleLibre) {
@@ -594,7 +595,8 @@ async function generateWithGroq(isAutoMode = false) {
                 theme: isAutoMode ? "" : theme,
                 targetArtist: isAutoMode ? "" : targetArtist,
                 isAutoMode: Boolean(isAutoMode),
-                provider: provider
+                provider: provider,
+                mixData: mixData || undefined
             })
         });
 
@@ -2320,6 +2322,83 @@ function init() {
             toast("Tous les artistes affichés", "info");
         }
     });
+
+    // --- Mode Mix : toggle + peuplement des listes additionnelles ---
+    const mixModeToggle = $("mix-mode-toggle");
+    const mixStyleGroup = $("mix-style-group");
+    const mixArtistGroup = $("mix-artist-group");
+
+    function updateMixModeUI() {
+        const enabled = mixModeToggle && mixModeToggle.checked;
+        if (mixStyleGroup) mixStyleGroup.classList.toggle("hidden", !enabled);
+        if (mixArtistGroup) mixArtistGroup.classList.toggle("hidden", !enabled);
+        if (enabled) {
+            populateMixSelects();
+        }
+    }
+
+    function populateMixSelects() {
+        const genres = getAllGenres();
+        const mixStyle2 = $("mix-style-2");
+        const mixStyle3 = $("mix-style-3");
+        const mixArtist2 = $("mix-artist-2");
+        const mixArtist3 = $("mix-artist-3");
+
+        [mixStyle2, mixStyle3].forEach(select => {
+            if (!select) return;
+            const current = select.value;
+            select.innerHTML = select.id.includes("mix-style-2")
+                ? '<option value="">— Style 2 —</option>'
+                : '<option value="">— Style 3 (optionnel) —</option>';
+            genres.forEach(genre => {
+                const option = document.createElement("option");
+                option.value = genre;
+                option.textContent = genre;
+                select.appendChild(option);
+            });
+            if (current) select.value = current;
+        });
+
+        [mixArtist2, mixArtist3].forEach(select => {
+            if (!select) return;
+            const current = select.value;
+            select.innerHTML = select.id.includes("mix-artist-2")
+                ? '<option value="">— Artiste 2 —</option>'
+                : '<option value="">— Artiste 3 (optionnel) —</option>';
+            if (typeof ARTISTS_DATABASE !== "undefined") {
+                ARTISTS_DATABASE.forEach(artist => {
+                    const optgroup = document.createElement("optgroup");
+                    optgroup.label = artist.language || "Autre";
+                    const option = document.createElement("option");
+                    option.value = artist.name;
+                    option.textContent = artist.name + " (" + artist.genre + ")";
+                    optgroup.appendChild(option);
+                    select.appendChild(optgroup);
+                });
+            }
+            if (current) select.value = current;
+        });
+    }
+
+    if (mixModeToggle) {
+        mixModeToggle.addEventListener("change", updateMixModeUI);
+    }
+
+    function getMixData() {
+        if (!mixModeToggle || !mixModeToggle.checked) return null;
+        const mixStyles = [
+            $("style-select") && $("style-select").value || "",
+            $("mix-style-2") && $("mix-style-2").value || "",
+            $("mix-style-3") && $("mix-style-3").value || ""
+        ].filter(Boolean);
+        const mixArtists = [
+            $("artist-style") && $("artist-style").value || "",
+            $("mix-artist-2") && $("mix-artist-2").value || "",
+            $("mix-artist-3") && $("mix-artist-3").value || ""
+        ].filter(Boolean);
+        if (mixStyles.length < 2 && mixArtists.length < 2) return null;
+        return { mixStyles, mixArtists };
+    }
 
     // --- Bouton refresh titre ---
     $("btn-refresh-title").addEventListener("click", () => {

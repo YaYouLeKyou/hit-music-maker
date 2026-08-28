@@ -330,7 +330,7 @@ const UDIO_MODEL = process.env.UDIO_MODEL || "chirp-v4-5";
  *    introspectif ou sociétal fort.
  *  - Classique : le thème imposé par l'utilisateur est respecté.
  */
-function buildSystemPrompt({ theme, artist, isAutoMode }) {
+function buildSystemPrompt({ theme, artist, isAutoMode, mixData }) {
     const artistName = artist ? artist.name : "Artiste Polyvalent";
 
     // Langue d'écriture des paroles : déduite du champ "language" de la BDD.
@@ -372,6 +372,38 @@ function buildSystemPrompt({ theme, artist, isAutoMode }) {
         titleGuidance = "- Titre à générer basé sur le thème imposé : " + theme;
     }
 
+    let mixBlock = "";
+    if (mixData && (mixData.mixStyles || mixData.mixArtists)) {
+        const mixStyles = (mixData.mixStyles || []).filter(Boolean);
+        const mixArtists = (mixData.mixArtists || []).filter(Boolean);
+        if (mixStyles.length >= 2 || mixArtists.length >= 2) {
+            mixBlock = [
+                "",
+                "MODE MIX ACTIVÉ :",
+                "L'utilisateur demande un mélange créatif entre plusieurs styles et/ou artistes.",
+                "Tu dois créer une chanson HYBRIDE qui fusionne intelligemment :"
+            ].join("\n");
+
+            if (mixStyles.length >= 2) {
+                mixBlock += "\n- Styles mélangés : " + mixStyles.join(" + ");
+            }
+            if (mixArtists.length >= 2) {
+                mixBlock += "\n- Références artistiques mélangées : " + mixArtists.join(" + ");
+            }
+
+            mixBlock += [
+                "",
+                "INSTRUCTIONS SPÉCIFIQUES POUR LE MIX :",
+                "1. NE CHOISIS PAS UN SEUL style ou UN SEUL artiste : fusionne-en plusieurs.",
+                "2. MÉLANGE les genres musicaux (ex : si 'Soul' + 'Electronic', crée une Soul électronique).",
+                "3. MÉLANGE les univers artistiques : instruments, flow, diction, thèmes.",
+                "4. Crée un titre, un thème et des paroles qui respectent cette fusion.",
+                "5. Le stylePrompt généré doit reflète ce mélange (genres croisés, BPM hybrides, instruments hybrides).",
+                "6. La coverPrompt doit visuellement représenter cette fusion de styles."
+            ].join("\n");
+        }
+    }
+
     return [
         "Tu es un Directeur Artistique, Parolier et Producteur Audio d'élite, spécialisé dans la création de hits profondément artistiques.",
         "Ta mission est de générer une chanson complète avec un titre accrocheur, un thème profond et des paroles qui résonnent émotionnellement.",
@@ -380,6 +412,7 @@ function buildSystemPrompt({ theme, artist, isAutoMode }) {
         "",
         titleGuidance,
         "",
+        mixBlock,
         "DONNÉES STUDIO DE L'ARTISTE CIBLE :",
         "- Nom : " + artistName,
         "- Genre : " + (artist ? artist.genre : "Modern Rap / Trap"),
@@ -416,12 +449,12 @@ function buildSystemPrompt({ theme, artist, isAutoMode }) {
 
 /**
  * Route POST /api/generate
- * Body attendu : { apiKey?, provider?, theme?, targetArtist?, isAutoMode?, userId? }
+ * Body attendu : { apiKey?, provider?, theme?, targetArtist?, isAutoMode?, userId?, mixData? }
  * Génère paroles/style via le provider AI sélectionné (Groq, Gemini, OpenRouter, TogetherAI, Mistral).
  */
 app.post("/api/generate", async (req, res) => {
     try {
-        const { apiKey: clientKey, provider, theme, targetArtist, isAutoMode, userId } = req.body || {};
+        const { apiKey: clientKey, provider, theme, targetArtist, isAutoMode, userId, mixData } = req.body || {};
 
         // Priorité à la clé du client (localStorage), sinon fallback sur le .env du serveur
         const apiKey = clientKey && typeof clientKey === "string" && clientKey.trim().length >= 10
@@ -487,7 +520,8 @@ app.post("/api/generate", async (req, res) => {
                 artist,
                 isAutoMode: Boolean(isAutoMode),
                 provider: selectedProvider,
-                apiKey: effectiveApiKey
+                apiKey: effectiveApiKey,
+                mixData
             });
         } catch (providerErr) {
             console.warn(`[generate] Provider ${selectedProvider} échoué :`, providerErr.message);
@@ -520,7 +554,8 @@ app.post("/api/generate", async (req, res) => {
                     rawContent = await callGemini({
                         theme: typeof theme === "string" ? theme.trim() : "",
                         artist,
-                        isAutoMode: Boolean(isAutoMode)
+                        isAutoMode: Boolean(isAutoMode),
+                        mixData
                     });
                 } catch (geminiErr) {
                     if (geminiErr.quotaExceeded && !apiKey) {
@@ -1116,8 +1151,8 @@ function extractJson(text) {
 }
 
 /** Appelle l'API Gemini en mode texte (fallback LLM). */
-async function callGemini({ theme, artist, isAutoMode }) {
-    const systemPrompt = buildSystemPrompt({ theme, artist, isAutoMode });
+async function callGemini({ theme, artist, isAutoMode, mixData }) {
+    const systemPrompt = buildSystemPrompt({ theme, artist, isAutoMode, mixData });
     const userInstruction = [
         "Génère la chanson complète conformément aux instructions du système.",
         "Réponds UNIQUEMENT avec l'objet JSON valide, sans texte autour, sans balises markdown."
@@ -1158,11 +1193,11 @@ async function callGemini({ theme, artist, isAutoMode }) {
 /**
  * Appel générique vers un provider AI (OpenAI-compatible : Groq, OpenRouter, Together, Mistral)
  */
-async function callOpenAICompatible({ theme, artist, isAutoMode, providerKey, apiKey, model }) {
+async function callOpenAICompatible({ theme, artist, isAutoMode, providerKey, apiKey, model, mixData }) {
     const provider = AI_PROVIDERS[providerKey];
     if (!provider) throw new Error(`Provider ${providerKey} non configuré`);
     
-    const systemPrompt = buildSystemPrompt({ theme, artist, isAutoMode });
+    const systemPrompt = buildSystemPrompt({ theme, artist, isAutoMode, mixData });
     const userInstruction = [
         "Génère la chanson complète conformément aux instructions du système.",
         "Réponds UNIQUEMENT avec l'objet JSON valide, sans texte autour, sans balises markdown."
@@ -1222,7 +1257,7 @@ async function callOpenAICompatible({ theme, artist, isAutoMode, providerKey, ap
 /**
  * Appel unifié vers n'importe quel provider AI
  */
-async function callAIProvider({ theme, artist, isAutoMode, provider, apiKey, model }) {
+async function callAIProvider({ theme, artist, isAutoMode, provider, apiKey, model, mixData }) {
     const providerKey = provider || "groq";
     const providerConfig = AI_PROVIDERS[providerKey];
     if (!providerConfig) throw new Error(`Provider ${providerKey} inconnu`);
@@ -1234,9 +1269,9 @@ async function callAIProvider({ theme, artist, isAutoMode, provider, apiKey, mod
     }
 
     if (providerKey === "gemini") {
-        return callGemini({ theme, artist, isAutoMode });
+        return callGemini({ theme, artist, isAutoMode, mixData });
     } else {
-        return callOpenAICompatible({ theme, artist, isAutoMode, providerKey, apiKey: effectiveApiKey, model: model || providerConfig.defaultModel });
+        return callOpenAICompatible({ theme, artist, isAutoMode, providerKey, apiKey: effectiveApiKey, model: model || providerConfig.defaultModel, mixData });
     }
 }
 
