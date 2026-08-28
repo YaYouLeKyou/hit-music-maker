@@ -163,6 +163,17 @@ function applyPresetToState(preset) {
         state.lyricsLanguage = preset.lyrics.language;
         state.lyricsStructure = preset.lyrics.structure;
         state.lyricsTheme = preset.lyrics.theme;
+        // La config auto génère aussi le squelette des paroles (blocs) à partir
+        // de la structure du modèle — sans jamais écraser un texte existant.
+        const hasExistingLyrics = (state.lyricsBlocks || []).some((b) => String(b.text || "").trim())
+            || String(state.lyricsText || "").trim();
+        if (!hasExistingLyrics && typeof LyricsStructure !== "undefined") {
+            const skeleton = LyricsStructure.buildLyricsSkeletonFromStructure(preset.lyrics.structure);
+            if (skeleton.length) {
+                state.lyricsBlocks = skeleton;
+                toast(`Squelette de paroles créé : ${skeleton.length} sections (« Générer (IA) » écrit le texte).`, "info");
+            }
+        }
     } else if (state.instrumentalOnly) {
         state.lyricsLanguage = "fr";
         state.lyricsStructure = "intro, couplet-a, refrain, couplet-b, refrain, bridge, outro";
@@ -250,6 +261,12 @@ function applyMixProfiles(presetA, presetB, ratio = 0.5) {
         state.lyricsLanguage = pick(a.lyrics.language, b.lyrics.language);
         state.lyricsStructure = pick(a.lyrics.structure, b.lyrics.structure);
         state.lyricsTheme = pick(a.lyrics.theme, b.lyrics.theme);
+        // Squelette de paroles dérivé de la structure mixée (sans écraser l'existant)
+        const hasExistingLyrics = (state.lyricsBlocks || []).some((blk) => String(blk.text || "").trim())
+            || String(state.lyricsText || "").trim();
+        if (!hasExistingLyrics && typeof LyricsStructure !== "undefined") {
+            state.lyricsBlocks = LyricsStructure.buildLyricsSkeletonFromStructure(state.lyricsStructure);
+        }
     }
     if (a.production && b.production) {
         state.productionAtmosphere = pick(a.production.atmosphere, b.production.atmosphere);
@@ -934,16 +951,24 @@ function removeInstrumentCard(id) {
     renderInstrumentCards();
 }
 
+function resetInstrumentCards() {
+    state.instrumentCards = getConfigTemplate(state.config).map(c => fillCardDefaults(c));
+    saveState();
+    renderInstrumentCards();
+    toast(`Cartes réinitialisées pour la config : ${state.config}`, "info");
+}
+
 // ============================================================
 // Création détaillée des paroles (blocs, comme Studio)
 // ============================================================
 
-const LYRICS_BLOCK_TYPES = ["Intro", "Couplet 1", "Couplet 2", "Pré-refrain", "Refrain", "Pont", "Outro"];
+const LYRICS_BLOCK_TYPES = ["Intro", "Couplet 1", "Couplet 2", "Couplet 3", "Pré-refrain", "Refrain", "Pont", "Outro"];
 
 const LYRICS_BLOCK_ICONS = {
     "Intro": "fa-play",
     "Couplet 1": "fa-microphone-lines",
     "Couplet 2": "fa-microphone-lines",
+    "Couplet 3": "fa-microphone-lines",
     "Pré-refrain": "fa-arrow-trend-up",
     "Refrain": "fa-star",
     "Pont": "fa-bridge",
@@ -954,6 +979,7 @@ const LYRICS_BLOCK_COLORS = {
     "Intro": "border-sky-500/60",
     "Couplet 1": "border-purple-500/60",
     "Couplet 2": "border-purple-500/60",
+    "Couplet 3": "border-purple-500/60",
     "Pré-refrain": "border-amber-500/60",
     "Refrain": "border-fuchsia-500/70",
     "Pont": "border-teal-500/60",
@@ -961,8 +987,12 @@ const LYRICS_BLOCK_COLORS = {
 };
 
 // Formate les blocs comme dans Studio : [Type]\ntexte
-function buildLyricsFromBlocks() {
-    return (state.lyricsBlocks || [])
+// @param {boolean} [onlyFilled] - n'inclure que les blocs dont le texte est rempli
+function buildLyricsFromBlocks(onlyFilled) {
+    const blocks = onlyFilled
+        ? (state.lyricsBlocks || []).filter((b) => String(b.text || "").trim())
+        : (state.lyricsBlocks || []);
+    return blocks
         .map(b => "[" + b.type + "]\n" + String(b.text || "").trim())
         .join("\n\n");
 }
@@ -1082,6 +1112,12 @@ function initLyricsBlocks() {
         });
     }
 
+    // Génération IA des paroles (artiste + thème du modèle appliqué)
+    const aiBtn = $("btn-lyrics-ai");
+    if (aiBtn) {
+        aiBtn.addEventListener("click", generateLyricsWithAi);
+    }
+
     // Délégation d'événements pour les cartes de blocs
     const container = $("lyrics-blocks-container");
     if (container) {
@@ -1118,6 +1154,78 @@ function initLyricsBlocks() {
                 scheduleLyricsSave();
             }
         });
+    }
+}
+
+// ============================================================
+// Génération IA des paroles (réutilise la route POST /api/generate)
+// ============================================================
+
+/**
+ * Génère les paroles complètes avec l'IA à partir de l'artiste et du thème
+ * issus du modèle appliqué (config auto). Les blocs renvoyés (tags FR / EN /
+ * ES selon la langue de l'artiste) sont normalisés vers les types canoniques
+ * FR de Studio Pro, puis injectés dans les blocs lyrics et le prompt final.
+ */
+async function generateLyricsWithAi() {
+    if (state.instrumentalOnly) {
+        toast("Mode instrumental activé : les paroles sont désactivées.", "warning");
+        return;
+    }
+    const btn = $("btn-lyrics-ai");
+    const originalHtml = btn ? btn.innerHTML : "";
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i>Écriture…';
+    }
+    try {
+        const provider = ($("provider-select") && $("provider-select").value) || "groq";
+        const theme = String(state.lyricsTheme || "").trim()
+            || `Chanson ${state.style || "originale"}${state.artist ? " dans l'esprit de " + state.artist : ""}`;
+        const res = await fetch("/api/generate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                theme,
+                targetArtist: state.artist || "",
+                isAutoMode: false,
+                provider
+            })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            throw new Error(data.error || `Erreur serveur (${res.status})`);
+        }
+        if (typeof LyricsStructure === "undefined") {
+            throw new Error("Module lyrics_structure.js non chargé — rechargez la page (Ctrl+F5).");
+        }
+        const counters = { verse: 0 };
+        const blocks = (Array.isArray(data.blocks) ? data.blocks : [])
+            .map((b) => ({
+                type: LyricsStructure.toCanonicalLyricsType(b && b.type, counters, { fallbackRaw: true }) || "Couplet 1",
+                text: LyricsStructure.cleanAiBlockText(b && b.text, b && b.type)
+            }))
+            .filter((b) => b.text);
+        if (!blocks.length) {
+            throw new Error("Le modèle n'a renvoyé aucune parole exploitable. Réessayez.");
+        }
+        state.lyricsBlocks = blocks;
+        if (!String(state.lyricsTheme || "").trim() && data.generatedTheme) {
+            state.lyricsTheme = data.generatedTheme;
+            const themeEl = $("lyrics-theme");
+            if (themeEl) themeEl.value = state.lyricsTheme;
+        }
+        renderLyricsBlocks();
+        updateLyricsPreview();
+        saveState();
+        toast(`Paroles générées : ${blocks.length} sections 🎤`, "success");
+    } catch (err) {
+        toast(err.message || "Échec de la génération des paroles.", "error");
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+        }
     }
 }
 
@@ -1195,7 +1303,8 @@ function assemblePrompt() {
         if (state.lyricsTheme) lyricsParts.push(`thème : ${state.lyricsTheme}`);
         parts.push(`Paroles : ${lyricsParts.join(", ")}`);
         // Paroles complètes : les blocs détaillés sont prioritaires, sinon le texte libre
-        const lyricsFullText = buildLyricsFromBlocks() || state.lyricsText;
+        // (seuls les blocs réellement remplis alimentent le prompt Suno)
+        const lyricsFullText = buildLyricsFromBlocks(true) || state.lyricsText;
         if (lyricsFullText) parts.push(lyricsFullText);
     }
 
@@ -1818,6 +1927,10 @@ function init() {
     const btnAddInstrument = $("btn-add-instrument");
     if (btnAddInstrument) {
         btnAddInstrument.addEventListener("click", addInstrumentCard);
+    }
+    const btnResetInstruments = $("btn-reset-instruments");
+    if (btnResetInstruments) {
+        btnResetInstruments.addEventListener("click", resetInstrumentCards);
     }
 }
 

@@ -304,6 +304,55 @@ const STUDIO_PRESETS = [
 // 2. Génération automatique de presets à partir de ARTISTS_DATABASE
 // ------------------------------------------------------------
 
+/**
+ * Thématiques de paroles par famille de genre — utilisées pour enrichir
+ * les presets générés depuis toute la BDD d'artistes (à la place de
+ * l'ancien « theme: Generic »). Le premier mot-clé trouvé dans le genre
+ * détermine l'univers lyrique proposé.
+ */
+const GENRE_LYRICS_THEMES = [
+    { match: ["reggae", "ska", "dancehall", "dub", "roots"], theme: "Unité, résistance, spiritualité, amour universel, liberté" },
+    { match: ["rap", "trap", "drill", "hip-hop", "hip hop"], theme: "Rue et ambition, loyauté, ascension sociale, vérités crues" },
+    { match: ["rock", "metal", "punk", "grunge"], theme: "Révolte, liberté, dépassement de soi, dénonciation du système" },
+    { match: ["jazz", "blues", "soul", "bossa"], theme: "Nostalgie, amour mélancolique, renaissance, douceur de vivre" },
+    { match: ["funk", "disco", "groove"], theme: "Fête, groove, séduction, confiance en soi, bonne humeur" },
+    { match: ["electro", "house", "techno", "edm", "dance", "trance"], theme: "Nuit et liberté, euphorie, connexion, lâcher-prise" },
+    { match: ["afro", "coupé", "zouk", "amapiano"], theme: "Joie de vivre, racines, amour, fierté culturelle" },
+    { match: ["latino", "reggaeton", "salsa", "bachata", "cumbia"], theme: "Passion, danse, amour interdit, nostalgie du pays" },
+    { match: ["chanson", "variété", "acoustique", "folk"], theme: "Récit de vie, émotions sincères, souvenirs, espoir" },
+    { match: ["classique", "orchestre", "opera", "opéra", "lyrique"], theme: "Destin, grandeur, passion tragique, transcendance" },
+    { match: ["country"], theme: "Route et liberté, racines, amour simple, souvenirs d'enfance" },
+    { match: ["rnb", "r&b"], theme: "Amour sensuel, vulnérabilité, désir, relations sincères" },
+    { match: ["pop"], theme: "Amour, émotions du quotidien, envie de liberté, moments de vie" }
+];
+const DEFAULT_LYRICS_THEME = "Amour, espoir, résilience, émotions sincères";
+
+/**
+ * Structure de paroles par défaut selon la famille de genre.
+ * @param {string} genre
+ * @returns {string}
+ */
+function deriveLyricsStructure(genre) {
+    const g = String(genre || "").toLowerCase();
+    if (/rap|trap|drill|hip-hop|hip hop/.test(g)) return "intro, couplet-a, refrain, couplet-b, refrain, outro";
+    if (/electro|house|techno|edm|dance|trance/.test(g)) return "intro, couplet-a, refrain, couplet-b, refrain, outro";
+    return "intro, couplet-a, refrain, couplet-b, refrain, bridge, outro";
+}
+
+/**
+ * Thème lyrique enrichi pour un artiste : univers du genre + signature
+ * d'écriture (flow_signature) quand elle est renseignée dans la BDD.
+ * @param {{genre?: string, flow_signature?: string}} artist
+ * @returns {string}
+ */
+function deriveLyricsTheme(artist) {
+    const genre = String((artist && artist.genre) || "");
+    const hit = GENRE_LYRICS_THEMES.find((t) => t.match.some((k) => genre.toLowerCase().includes(k)));
+    const base = hit ? hit.theme : DEFAULT_LYRICS_THEME;
+    const flow = artist && artist.flow_signature ? String(artist.flow_signature).trim() : "";
+    return flow ? base + " — style d'écriture : " + flow : base;
+}
+
 function buildArtistPreset(artist) {
     if (typeof ARTISTS_DATABASE === "undefined") return null;
     const g = artist.genre || "";
@@ -335,7 +384,11 @@ function buildArtistPreset(artist) {
         guitar:  { type: "Rhythm / Lead", role: "Rhythm" },
         keys:    { type: "Pads / Lead" },
         vocals:  { style: "Melodic", range: "Standard", singerStyle1: g, singerArtist1: artist.name },
-        lyrics:  { language: artist.language || "Anglais", structure: "Verse / Refrain", theme: "Generic" },
+        lyrics:  {
+            language: artist.language || "Anglais",
+            structure: deriveLyricsStructure(g),
+            theme: deriveLyricsTheme(artist)
+        },
         production: { atmosphere: "Standard", reference: "Standard", effects: ["reverb", "delay"] },
         mixMode: false
     };
