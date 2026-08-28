@@ -1,0 +1,17 @@
+public/uploads/
+public/published/
+node_modules/
+.git/
+.env
+*.mp3
+*.mp4
+*.wav
+*.ogg
+*.m4a
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.db
+hits/
+temp_check.py
