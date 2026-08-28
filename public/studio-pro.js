@@ -981,6 +981,8 @@ function init() {
     populateSingerSelects();
     if (state.mixMode) populateMixSelects();
     syncUiFromState();
+    initPresetChipsAndSelect();
+    loadStudioPresets();
 
     // Configuration cards
     document.querySelectorAll(".config-card").forEach(card => {
