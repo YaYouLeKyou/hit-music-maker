@@ -2186,6 +2186,210 @@ const ARTISTS_DATABASE = [
         language: "Espagnol",
         prompt_audio_preset: "Latin Jazz Fusion, 140 BPM, Miami atmosphere, saxophones, complex percussion, radio-ready modern mix, wide stereo image",
         flow_signature: "Modern delivery, latin-jazz flow, sax lines, fusion, contemporary"
+    },
+
+    // ============================================================
+    // SUPERSTARS GLOBALES - 20 Artistes
+    // ============================================================
+    {
+        name: "The Beatles",
+        genre: "Rock / Pop",
+        bpm_range: "100-140",
+        instruments: "Guitar, bass, drums, keyboards, vocals, sitar, orchestral strings",
+        drum_style: "Classic rock with driving beat, innovative percussion, varied rhythms",
+        language: "Anglais",
+        prompt_audio_preset: "Classic Rock, 120 BPM, Liverpool atmosphere, melodic guitars, tight drums, harmonies, radio-ready timeless mix, wide stereo image",
+        flow_signature: "Melodic delivery, harmonies, innovative structure, British invasion, timeless"
+    },
+    {
+        name: "Bob Dylan",
+        genre: "Folk / Rock",
+        bpm_range: "80-120",
+        instruments: "Guitar, harmonica, piano, organ, bass, drums",
+        drum_style: "Folk-rock with organic rhythm, harmonica fills, acoustic groove",
+        language: "Anglais",
+        prompt_audio_preset: "Folk Rock, 100 BPM, New York atmosphere, acoustic guitar, harmonica, poetic vocals, radio-ready classic mix, wide stereo image",
+        flow_signature: "Poetic delivery, nasal vocal, storytelling, folk-rock, protest"
+    },
+    {
+        name: "Stevie Wonder",
+        genre: "Soul / R&B",
+        bpm_range: "80-120",
+        instruments: "Piano, synthesizer, harmonica, bass, drums, vocals",
+        drum_style: "Soul with organic groove, harmonica solos, melodic piano",
+        language: "Anglais",
+        prompt_audio_preset: "Classic Soul, 100 BPM, Detroit atmosphere, piano, harmonica, funky bass, radio-ready vintage mix, wide stereo image",
+        flow_signature: "Soulful delivery, melodic improvisation, harmonica solos, Motown, joyful"
+    },
+    {
+        name: "Michael Jackson",
+        genre: "Pop / R&B",
+        bpm_range: "100-130",
+        instruments: "Percussion, bass, synthesizer, guitar, vocals, drum machine",
+        drum_style: "Pop with tight drums, iconic percussion, danceable groove",
+        language: "Anglais",
+        prompt_audio_preset: "Pop R&B, 118 BPM, Los Angeles atmosphere, iconic percussion, bass, synthesized strings, radio-ready polished mix, wide stereo image",
+        flow_signature: "Iconic delivery, vocal acrobatics, dance-pop, King of Pop, electrifying"
+    },
+    {
+        name: "David Bowie",
+        genre: "Rock / Art Rock",
+        bpm_range: "90-140",
+        instruments: "Guitar, synthesizer, bass, drums, vocals, saxophone",
+        drum_style: "Art rock with experimental rhythm, electronic elements, varied tempos",
+        language: "Anglais",
+        prompt_audio_preset: "Art Rock, 120 BPM, London atmosphere, experimental synths, guitar, theatrical vocals, radio-ready avant-garde mix, wide stereo image",
+        flow_signature: "Theatrical delivery, chameleon-like, experimental, British rock, iconic"
+    },
+    {
+        name: "ABBA",
+        genre: "Pop / Disco",
+        bpm_range: "110-130",
+        instruments: "Piano, synthesizer, bass, drums, strings, vocals",
+        drum_style: "Disco-pop with four-on-the-floor, string arrangements, catchy rhythm",
+        language: "Anglais",
+        prompt_audio_preset: "Disco Pop, 122 BPM, Stockholm atmosphere, piano, synths, string sections, female vocals, radio-ready dance mix, wide stereo image",
+        flow_signature: "Harmonic delivery, Swedish pop, disco groove, melodic, timeless"
+    },
+    {
+        name: "Madonna",
+        genre: "Pop / Dance",
+        bpm_range: "110-130",
+        instruments: "Synthesizer, drum machine, bass, guitar, vocals",
+        drum_style: "Dance-pop with electronic beats, four-on-the-floor, club rhythm",
+        language: "Anglais",
+        prompt_audio_preset: "Dance Pop, 122 BPM, New York atmosphere, electronic beats, synths, powerful female vocal, radio-ready club mix, wide stereo image",
+        flow_signature: "Confident delivery, dance-pop, provocative, Queen of Pop, empowering"
+    },
+    {
+        name: "Prince",
+        genre: "Pop / Funk / Rock",
+        bpm_range: "100-140",
+        instruments: "Guitar, synthesizer, bass, drums, vocals, piano",
+        drum_style: "Funk-rock with tight groove, guitar riffs, electronic elements",
+        language: "Anglais",
+        prompt_audio_preset: "Pop Funk, 118 BPM, Minneapolis atmosphere, guitar, synths, funky bass, radio-ready polished mix, wide stereo image",
+        flow_signature: "Sultry delivery, guitar virtuoso, Minneapolis sound, androgynous, electrifying"
+    },
+    {
+        name: "Whitney Houston",
+        genre: "R&B / Pop",
+        bpm_range: "90-120",
+        instruments: "Piano, bass, drums, synthesizer, strings, vocals",
+        drum_style: "R&B-pop with smooth groove, orchestral elements, power ballad rhythm",
+        language: "Anglais",
+        prompt_audio_preset: "R&B Pop, 100 BPM, New York atmosphere, piano, strings, smooth drums, powerful female vocal, radio-ready classic mix, wide stereo image",
+        flow_signature: "Powerful delivery, melismatic runs, pop-R&B, diva, emotional"
+    },
+    {
+        name: "Nirvana",
+        genre: "Grunge / Rock",
+        bpm_range: "100-140",
+        instruments: "Guitar, bass, drums, vocals",
+        drum_style: "Grunge with heavy guitar, dynamic shifts, raw drum sound",
+        language: "Anglais",
+        prompt_audio_preset: "Grunge Rock, 126 BPM, Seattle atmosphere, distorted guitar, heavy bass, raw drums, radio-ready alternative mix, wide stereo image",
+        flow_signature: "Raw delivery, grunge aesthetic, dynamic quiet-loud, Seattle, iconic"
+    },
+    {
+        name: "Tupac Shakur",
+        genre: "Hip-Hop / Rap",
+        bpm_range: "85-100",
+        instruments: "Drum machine, sampler, bass, vocals",
+        drum_style: "Hip-hop with boom-bap drums, sampled loops, West Coast groove",
+        language: "Anglais",
+        prompt_audio_preset: "West Coast Hip-Hop, 92 BPM, Los Angeles atmosphere, heavy bass, sampled drums, aggressive male vocal, radio-ready classic mix, wide stereo image",
+        flow_signature: "Poetic delivery, West Coast flow, socially conscious, rap legend, passionate"
+    },
+    {
+        name: "The Notorious B.I.G.",
+        genre: "Hip-Hop / Rap",
+        bpm_range: "85-100",
+        instruments: "Drum machine, sampler, bass, vocals",
+        drum_style: "Hip-hop with boom-bap drums, sampled loops, East Coast groove",
+        language: "Anglais",
+        prompt_audio_preset: "East Coast Hip-Hop, 92 BPM, New York atmosphere, sampled drums, heavy bass, smooth male vocal, radio-ready classic mix, wide stereo image",
+        flow_signature: "Smooth delivery, East Coast flow, storytelling, rap legend, confident"
+    },
+    {
+        name: "Daft Punk",
+        genre: "Electronic / House",
+        bpm_range: "110-130",
+        instruments: "Synthesizer, drum machine, sampler, vocoder, bass",
+        drum_style: "House with four-on-the-floor, filtered synths, electronic percussion",
+        language: "Anglais",
+        prompt_audio_preset: "French House, 122 BPM, Paris atmosphere, filtered synths, four-on-the-floor, vocoder vocals, radio-ready dance mix, wide stereo image",
+        flow_signature: "Robotic delivery, French house, electronic, futuristic, dancefloor"
+    },
+    {
+        name: "Coldplay",
+        genre: "Alternative Rock / Pop",
+        bpm_range: "90-140",
+        instruments: "Guitar, piano, bass, drums, synthesizer, vocals",
+        drum_style: "Alternative rock with anthemic drums, piano ballads, atmospheric rhythm",
+        language: "Anglais",
+        prompt_audio_preset: "Alternative Rock, 118 BPM, London atmosphere, piano, guitar, atmospheric drums, anthemic male vocal, radio-ready modern mix, wide stereo image",
+        flow_signature: "Anthemic delivery, British rock, emotional, Coldplay style, stadium"
+    },
+    {
+        name: "Beyoncé",
+        genre: "R&B / Pop",
+        bpm_range: "90-130",
+        instruments: "Percussion, bass, synthesizer, guitar, vocals, drum machine",
+        drum_style: "R&B-pop with tight drums, electronic elements, danceable groove",
+        language: "Anglais",
+        prompt_audio_preset: "R&B Pop, 110 BPM, Houston atmosphere, percussion, synths, powerful female vocal, radio-ready polished mix, wide stereo image",
+        flow_signature: "Powerful delivery, R&B-pop, dance moves, Queen Bey, empowering"
+    },
+    {
+        name: "Rihanna",
+        genre: "Pop / R&B",
+        bpm_range: "90-130",
+        instruments: "Synthesizer, drum machine, bass, guitar, vocals",
+        drum_style: "Pop-R&B with electronic beats, Caribbean influences, club rhythm",
+        language: "Anglais",
+        prompt_audio_preset: "Pop R&B, 112 BPM, Caribbean atmosphere, synths, electronic drums, smooth female vocal, radio-ready club mix, wide stereo image",
+        flow_signature: "Smooth delivery, pop-R&B, Caribbean vibe, dancehall influence, confident"
+    },
+    {
+        name: "Lady Gaga",
+        genre: "Pop / Dance",
+        bpm_range: "110-130",
+        instruments: "Synthesizer, drum machine, bass, guitar, vocals, piano",
+        drum_style: "Dance-pop with electronic beats, four-on-the-floor, club rhythm",
+        language: "Anglais",
+        prompt_audio_preset: "Dance Pop, 122 BPM, New York atmosphere, electronic beats, synths, powerful female vocal, radio-ready club mix, wide stereo image",
+        flow_signature: "Theatrical delivery, dance-pop, avant-garde, pop icon, electrifying"
+    },
+    {
+        name: "Adele",
+        genre: "Pop / Soul",
+        bpm_range: "70-120",
+        instruments: "Piano, bass, drums, strings, guitar, vocals",
+        drum_style: "Soul-pop with organic groove, piano ballads, orchestral elements",
+        language: "Anglais",
+        prompt_audio_preset: "Soul Pop, 88 BPM, London atmosphere, piano, strings, soulful drums, powerful female vocal, radio-ready classic mix, wide stereo image",
+        flow_signature: "Powerful delivery, soul-pop, emotional, British, heartfelt"
+    },
+    {
+        name: "Taylor Swift",
+        genre: "Pop / Country",
+        bpm_range: "90-130",
+        instruments: "Guitar, bass, drums, synthesizer, banjo, vocals",
+        drum_style: "Pop-country with acoustic groove, electronic elements, catchy rhythm",
+        language: "Anglais",
+        prompt_audio_preset: "Pop Country, 110 BPM, Nashville atmosphere, guitar, synths, catchy drums, melodic female vocal, radio-ready modern mix, wide stereo image",
+        flow_signature: "Storytelling delivery, pop-country, confessional, Swift style, catchy"
+    },
+    {
+        name: "Ed Sheeran",
+        genre: "Pop / Folk",
+        bpm_range: "90-120",
+        instruments: "Guitar, bass, drums, loop pedal, vocals",
+        drum_style: "Pop-folk with acoustic groove, loop pedal layers, catchy rhythm",
+        language: "Anglais",
+        prompt_audio_preset: "Pop Folk, 104 BPM, London atmosphere, acoustic guitar, bass, catchy drums, male vocal, radio-ready modern mix, wide stereo image",
+        flow_signature: "Loop pedal delivery, pop-folk, confessional, British, catchy"
     }
 ];
 
