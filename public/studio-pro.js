@@ -298,9 +298,15 @@ function initPresetChipsAndSelect() {
             const presetId = chip.dataset.preset;
             const preset = window.ARTIST_PRESETS.find(p => p.id === presetId);
             if (preset) {
-                // Mémorise le modèle choisi : « Appliquer la config auto » le ré-appliquera
                 state.selectedPresetId = presetId;
                 applyPresetToState(preset);
+                if (!state.instrumentalOnly && typeof generateLyricsWithAi === "function") {
+                    const hasExistingLyrics = (state.lyricsBlocks || []).some((b) => String(b.text || "").trim())
+                        || String(state.lyricsText || "").trim();
+                    if (!hasExistingLyrics) {
+                        setTimeout(() => generateLyricsWithAi(true), 300);
+                    }
+                }
             }
         });
     });
@@ -311,9 +317,15 @@ function initPresetChipsAndSelect() {
             if (!presetId) return;
             const preset = window.ARTIST_PRESETS.find(p => p.id === presetId);
             if (preset) {
-                // Mémorise le modèle choisi : « Appliquer la config auto » le ré-appliquera
                 state.selectedPresetId = presetId;
                 applyPresetToState(preset);
+                if (!state.instrumentalOnly && typeof generateLyricsWithAi === "function") {
+                    const hasExistingLyrics = (state.lyricsBlocks || []).some((b) => String(b.text || "").trim())
+                        || String(state.lyricsText || "").trim();
+                    if (!hasExistingLyrics) {
+                        setTimeout(() => generateLyricsWithAi(true), 300);
+                    }
+                }
             }
         });
     }
