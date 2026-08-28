@@ -47,7 +47,8 @@ let state = {
     mixMode: false,
     mixStyles: [],
     mixArtists: [],
-    finalPrompt: ""
+    finalPrompt: "",
+    instrumentCards: []
 };
 
 // ============================================================
@@ -121,7 +122,10 @@ function applyPresetToState(preset) {
     state.artist = preset.artist || "";
     if (preset.drums) {
         state.drumStyle = preset.drums.style;
+        state.drumKit = preset.drums.kit || "";
         state.drumBpm = preset.drums.bpm;
+        state.drumGroove = preset.drums.groove || "straight";
+        state.drumFills = !!preset.drums.fills;
     }
     if (preset.harmony) {
         state.harmonyKey = preset.harmony.key;
@@ -165,6 +169,9 @@ function applyPresetToState(preset) {
         state.productionEffects = preset.production.effects || ["reverb", "delay"];
     }
     if (preset.mixMode !== undefined) state.mixMode = preset.mixMode;
+    if (preset.extras && Array.isArray(preset.extras)) {
+        state.instrumentCards = preset.extras.map(extra => ({ ...extra }));
+    }
     saveState();
     syncUiFromState();
     const label = preset.label ? `Configuration appliquée : ${preset.label}` : "Configuration appliquée";
@@ -183,7 +190,10 @@ function applyMixProfiles(presetA, presetB, ratio = 0.5) {
 
     if (a.drums && b.drums) {
         state.drumStyle = pick(a.drums.style, b.drums.style);
+        state.drumKit = pick(a.drums.kit, b.drums.kit);
         state.drumBpm = Math.round(pick(a.drums.bpm, b.drums.bpm));
+        state.drumGroove = pick(a.drums.groove, b.drums.groove);
+        state.drumFills = pick(a.drums.fills, b.drums.fills);
     }
     if (a.harmony && b.harmony) {
         state.harmonyKey = pick(a.harmony.key, b.harmony.key);
@@ -328,7 +338,7 @@ function generateDefaultsFromConfig(style, artist) {
         },
         lyrics: {
             language: "Français",
-            structure: "Verse / Refrain",
+            structure: "intro, couplet-a, refrain, couplet-b, refrain, bridge, outro",
             theme: ""
         },
         production: {
@@ -336,7 +346,8 @@ function generateDefaultsFromConfig(style, artist) {
             reference: style || "Standard",
             effects: ["reverb", "delay"]
         },
-        mixMode: false
+        mixMode: false,
+        instrumentCards: []
     };
 
     if (s.includes("hip-hop") || s.includes("trap") || s.includes("drill")) {
@@ -398,8 +409,11 @@ function generateDefaultsFromConfig(style, artist) {
 
     if (state.instrumentalOnly) {
         defaults.vocals = { style: "", range: "auto", singerStyle1: "", singerArtist1: "" };
-        defaults.lyrics = { language: "Français", structure: "Verse / Refrain", theme: "" };
+        defaults.lyrics = { language: "Français", structure: "intro, couplet-a, refrain, couplet-b, refrain, bridge, outro", theme: "" };
     }
+
+    const template = getConfigTemplate(state.config);
+    defaults.instrumentCards = template.map(card => ({ ...card }));
 
     return defaults;
 }
@@ -438,7 +452,7 @@ function handleAutoConfigure() {
             state.singerArtist1 = "";
             state.singerArtist2 = "";
             state.lyricsLanguage = "fr";
-            state.lyricsStructure = "auto";
+            state.lyricsStructure = "intro, couplet-a, refrain, couplet-b, refrain, bridge, outro";
             state.lyricsTheme = "";
             state.lyricsText = "";
             const vocalControls = $("vocal-controls");
@@ -461,7 +475,7 @@ function handleAutoConfigure() {
         state.singerArtist1 = "";
         state.singerArtist2 = "";
         state.lyricsLanguage = "fr";
-        state.lyricsStructure = "auto";
+        state.lyricsStructure = "intro, couplet-a, refrain, couplet-b, refrain, bridge, outro";
         state.lyricsTheme = "";
         state.lyricsText = "";
         const vocalControls = $("vocal-controls");
@@ -595,20 +609,151 @@ function updateConfigCards() {
     });
 }
 
-function getConfigInstruments() {
-    const base = {
-        solo: "Solo instrument + vocals",
-        duo: "Duo : 2 voices/instruments",
-        band: "Band : drums, bass, guitar/keys, vocals",
-        orchestra: "Orchestra : strings, winds, percussion",
-        opera: "Opera : classical vocals, orchestra",
-        urban: "Urban : 808s, synths, drums, vocals",
-        reggae: "Reggae : one drop drums, deep bass, guitar",
-        rock: "Rock : distorted guitars, drums, bass, vocals",
-        electronic: "Electronic : synths, drum machine, pads, vocals",
-        jazz: "Jazz : piano/bass/drums trio, horns, vocals"
-    };
-    return base[state.config] || base.solo;
+const CONFIG_CARD_TEMPLATES = {
+    solo: [
+        { id: "drums", label: "Rythme & Batterie", section: "drums", style: "", role: "", character: "" },
+        { id: "guitar-keys", label: "Guitares & Claviers", section: "guitar-keys", style: "", role: "", character: "" },
+        { id: "bass", label: "Basse", section: "bass", style: "", role: "", character: "" },
+        { id: "vocals", label: "Chant & Vocal", section: "vocals", style: "", role: "", character: "" },
+        { id: "production", label: "Production & Mix", section: "production", style: "", role: "", character: "" }
+    ],
+    duo: [
+        { id: "drums", label: "Rythme & Batterie", section: "drums", style: "", role: "", character: "" },
+        { id: "guitar-keys-1", label: "Guitare / Clavier 1", section: "guitar-keys", style: "", role: "", character: "" },
+        { id: "guitar-keys-2", label: "Guitare / Clavier 2", section: "guitar-keys", style: "", role: "", character: "" },
+        { id: "bass", label: "Basse", section: "bass", style: "", role: "", character: "" },
+        { id: "vocals", label: "Chant & Vocal", section: "vocals", style: "", role: "", character: "" },
+        { id: "production", label: "Production & Mix", section: "production", style: "", role: "", character: "" }
+    ],
+    band: [
+        { id: "drums", label: "Rythme & Batterie", section: "drums", style: "", role: "", character: "" },
+        { id: "guitar-keys-1", label: "Guitare / Clavier 1", section: "guitar-keys", style: "", role: "", character: "" },
+        { id: "guitar-keys-2", label: "Guitare / Clavier 2", section: "guitar-keys", style: "", role: "", character: "" },
+        { id: "bass", label: "Basse", section: "bass", style: "", role: "", character: "" },
+        { id: "harmony", label: "Harmonie & Accords", section: "harmony", style: "", role: "", character: "" },
+        { id: "vocals", label: "Chant & Vocal", section: "vocals", style: "", role: "", character: "" },
+        { id: "production", label: "Production & Mix", section: "production", style: "", role: "", character: "" }
+    ],
+    orchestra: [
+        { id: "drums", label: "Rythme & Batterie", section: "drums", style: "", role: "", character: "" },
+        { id: "strings", label: "Strings", section: "strings", style: "", role: "", character: "" },
+        { id: "brass", label: "Brass", section: "brass", style: "", role: "", character: "" },
+        { id: "woodwinds", label: "Woodwinds", section: "woodwinds", style: "", role: "", character: "" },
+        { id: "bass", label: "Basse", section: "bass", style: "", role: "", character: "" },
+        { id: "vocals", label: "Chant & Vocal", section: "vocals", style: "", role: "", character: "" },
+        { id: "production", label: "Production & Mix", section: "production", style: "", role: "", character: "" }
+    ],
+    opera: [
+        { id: "drums", label: "Rythme & Batterie", section: "drums", style: "", role: "", character: "" },
+        { id: "strings", label: "Strings", section: "strings", style: "", role: "", character: "" },
+        { id: "brass", label: "Brass", section: "brass", style: "", role: "", character: "" },
+        { id: "pipe-organ", label: "Pipe Organ", section: "organ", style: "", role: "", character: "" },
+        { id: "vocals", label: "Chant & Vocal", section: "vocals", style: "", role: "", character: "" },
+        { id: "production", label: "Production & Mix", section: "production", style: "", role: "", character: "" }
+    ],
+    urban: [
+        { id: "drums", label: "Rythme & Batterie", section: "drums", style: "", role: "", character: "" },
+        { id: "synth1", label: "Synth 1", section: "synth", style: "", role: "", character: "" },
+        { id: "synth2", label: "Synth 2", section: "synth", style: "", role: "", character: "" },
+        { id: "bass", label: "Basse", section: "bass", style: "", role: "", character: "" },
+        { id: "vocals", label: "Chant & Vocal", section: "vocals", style: "", role: "", character: "" },
+        { id: "production", label: "Production & Mix", section: "production", style: "", role: "", character: "" }
+    ],
+    reggae: [
+        { id: "drums", label: "Rythme & Batterie", section: "drums", style: "", role: "", character: "" },
+        { id: "guitar", label: "Guitare", section: "guitar", style: "", role: "", character: "" },
+        { id: "bass", label: "Basse", section: "bass", style: "", role: "", character: "" },
+        { id: "brass-perc", label: "Brass / Percussion", section: "brass", style: "", role: "", character: "" },
+        { id: "vocals", label: "Chant & Vocal", section: "vocals", style: "", role: "", character: "" },
+        { id: "production", label: "Production & Mix", section: "production", style: "", role: "", character: "" }
+    ],
+    rock: [
+        { id: "drums", label: "Rythme & Batterie", section: "drums", style: "", role: "", character: "" },
+        { id: "guitar1", label: "Guitare 1", section: "guitar", style: "", role: "", character: "" },
+        { id: "guitar2", label: "Guitare 2", section: "guitar", style: "", role: "", character: "" },
+        { id: "bass", label: "Basse", section: "bass", style: "", role: "", character: "" },
+        { id: "keys", label: "Claviers / Piano", section: "keys", style: "", role: "", character: "" },
+        { id: "vocals", label: "Chant & Vocal", section: "vocals", style: "", role: "", character: "" },
+        { id: "production", label: "Production & Mix", section: "production", style: "", role: "", character: "" }
+    ],
+    electronic: [
+        { id: "drums", label: "Rythme & Batterie", section: "drums", style: "", role: "", character: "" },
+        { id: "synth-lead", label: "Synth Lead", section: "synth", style: "", role: "", character: "" },
+        { id: "synth-pad", label: "Synth Pad", section: "synth", style: "", role: "", character: "" },
+        { id: "bass", label: "Basse", section: "bass", style: "", role: "", character: "" },
+        { id: "vocals", label: "Chant & Vocal", section: "vocals", style: "", role: "", character: "" },
+        { id: "production", label: "Production & Mix", section: "production", style: "", role: "", character: "" }
+    ],
+    jazz: [
+        { id: "drums", label: "Rythme & Batterie", section: "drums", style: "", role: "", character: "" },
+        { id: "piano", label: "Piano", section: "keys", style: "", role: "", character: "" },
+        { id: "bass", label: "Basse", section: "bass", style: "", role: "", character: "" },
+        { id: "brass", label: "Brass", section: "brass", style: "", role: "", character: "" },
+        { id: "vocals", label: "Chant & Vocal", section: "vocals", style: "", role: "", character: "" },
+        { id: "production", label: "Production & Mix", section: "production", style: "", role: "", character: "" }
+    ]
+};
+
+function getConfigTemplate(config) {
+    return CONFIG_CARD_TEMPLATES[config] || CONFIG_CARD_TEMPLATES.solo;
+}
+
+function renderInstrumentCards() {
+    const container = $("instrument-cards-container");
+    if (!container) return;
+    container.innerHTML = "";
+    const cards = state.instrumentCards || [];
+    cards.forEach(card => {
+        const el = document.createElement("div");
+        el.className = "bg-[#0f0f1a] border border-purple-800/70 rounded-xl p-4 space-y-2";
+        el.innerHTML = `
+            <div class="flex items-center justify-between">
+                <label class="text-xs font-medium text-gray-300">${escapeHtml(card.label)}</label>
+                <button type="button" class="text-xs text-red-400 hover:text-red-300" data-remove-card="${escapeHtml(card.id)}">
+                    <i class="fa-solid fa-trash mr-1"></i>Supprimer
+                </button>
+            </div>
+            <input type="text" value="${escapeHtml(card.style || "")}" data-card-id="${escapeHtml(card.id)}" data-card-key="style" placeholder="Style" class="w-full rounded-lg bg-[#1a1a2e] border border-purple-800/70 px-2 py-1.5 text-xs outline-none focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/30">
+            <input type="text" value="${escapeHtml(card.role || "")}" data-card-id="${escapeHtml(card.id)}" data-card-key="role" placeholder="Rôle" class="w-full rounded-lg bg-[#1a1a2e] border border-purple-800/70 px-2 py-1.5 text-xs outline-none focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/30">
+            <input type="text" value="${escapeHtml(card.character || "")}" data-card-id="${escapeHtml(card.id)}" data-card-key="character" placeholder="Caractère" class="w-full rounded-lg bg-[#1a1a2e] border border-purple-800/70 px-2 py-1.5 text-xs outline-none focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/30">
+        `;
+        container.appendChild(el);
+    });
+
+    container.querySelectorAll("input").forEach(input => {
+        input.addEventListener("input", (e) => {
+            const cardId = e.target.dataset.cardId;
+            const key = e.target.dataset.cardKey;
+            const card = state.instrumentCards.find(c => c.id === cardId);
+            if (card) {
+                card[key] = e.target.value;
+                saveState();
+            }
+        });
+    });
+
+    container.querySelectorAll("button[data-remove-card]").forEach(btn => {
+        btn.addEventListener("click", () => {
+            const cardId = btn.dataset.removeCard;
+            state.instrumentCards = state.instrumentCards.filter(c => c.id !== cardId);
+            saveState();
+            renderInstrumentCards();
+        });
+    });
+}
+
+function addInstrumentCard() {
+    const id = "card-" + Date.now();
+    state.instrumentCards = state.instrumentCards || [];
+    state.instrumentCards.push({ id, label: "Instrument", section: "custom", style: "", role: "", character: "" });
+    saveState();
+    renderInstrumentCards();
+}
+
+function removeInstrumentCard(id) {
+    state.instrumentCards = (state.instrumentCards || []).filter(c => c.id !== id);
+    saveState();
+    renderInstrumentCards();
 }
 
 // ============================================================
@@ -663,7 +808,7 @@ function assemblePrompt() {
         parts.push(`Guitares & Claviers : ${guitarParts.join(", ")}`);
     }
 
-    if (state.vocalStyle || state.vocalRange !== "auto" || state.singerStyle1 || state.singerStyle2 || state.singerArtist1 || state.singerArtist2) {
+    if (!state.instrumentalOnly && (state.vocalStyle || state.vocalRange !== "auto" || state.singerStyle1 || state.singerStyle2 || state.singerArtist1 || state.singerArtist2)) {
         const vocalParts = [];
         if (state.vocalStyle) vocalParts.push(`style vocal : ${state.vocalStyle}`);
         if (state.vocalRange !== "auto") vocalParts.push(`tessiture : ${state.vocalRange}`);
@@ -676,7 +821,7 @@ function assemblePrompt() {
         parts.push(`Chant : ${vocalParts.join(", ")}`);
     }
 
-    if (state.lyricsLanguage || state.lyricsStructure !== "auto" || state.lyricsTheme || state.lyricsText) {
+    if (!state.instrumentalOnly && (state.lyricsLanguage || state.lyricsStructure !== "auto" || state.lyricsTheme || state.lyricsText)) {
         const lyricsParts = [];
         if (state.lyricsLanguage) lyricsParts.push(`langue : ${state.lyricsLanguage}`);
         if (state.lyricsStructure !== "auto") lyricsParts.push(`structure : ${state.lyricsStructure}`);
@@ -691,6 +836,16 @@ function assemblePrompt() {
         if (state.productionReference) prodParts.push(`référence : ${state.productionReference}`);
         if (state.productionEffects.length > 0) prodParts.push(`effets : ${state.productionEffects.join(", ")}`);
         parts.push(`Production : ${prodParts.join(", ")}`);
+    }
+
+    if (state.instrumentCards && state.instrumentCards.length > 0) {
+        state.instrumentCards.forEach(card => {
+            const cardParts = [];
+            if (card.style) cardParts.push(`style : ${card.style}`);
+            if (card.role) cardParts.push(`rôle : ${card.role}`);
+            if (card.character) cardParts.push(`caractère : ${card.character}`);
+            if (cardParts.length) parts.push(`${card.label} : ${cardParts.join(", ")}`);
+        });
     }
 
     if (state.mixMode && (state.mixStyles.length >= 2 || state.mixArtists.length >= 2)) {
@@ -795,6 +950,8 @@ function syncUiFromState() {
     const lyricsSection = $("lyrics-section");
     if (vocalControls) vocalControls.classList.toggle("hidden", state.instrumentalOnly);
     if (lyricsSection) lyricsSection.classList.toggle("hidden", state.instrumentalOnly);
+
+    renderInstrumentCards();
 }
 
 // ============================================================
@@ -1010,8 +1167,11 @@ function init() {
     document.querySelectorAll(".config-card").forEach(card => {
         card.addEventListener("click", () => {
             state.config = card.dataset.config;
+            const template = getConfigTemplate(state.config);
+            state.instrumentCards = template.map(c => ({ ...c }));
             updateConfigCards();
             saveState();
+            syncUiFromState();
             toast(`Configuration : ${state.config}`, "info");
         });
     });
@@ -1097,7 +1257,7 @@ function init() {
                 state.singerArtist1 = "";
                 state.singerArtist2 = "";
                 state.lyricsLanguage = "fr";
-                state.lyricsStructure = "auto";
+                state.lyricsStructure = "intro, couplet-a, refrain, couplet-b, refrain, bridge, outro";
                 state.lyricsTheme = "";
                 state.lyricsText = "";
                 syncUiFromState();
@@ -1229,6 +1389,12 @@ function init() {
     const btnAutoConfigure = $("btn-auto-configure");
     if (btnAutoConfigure) {
         btnAutoConfigure.addEventListener("click", handleAutoConfigure);
+    }
+
+    // Instrument cards
+    const btnAddInstrument = $("btn-add-instrument");
+    if (btnAddInstrument) {
+        btnAddInstrument.addEventListener("click", addInstrumentCard);
     }
 }
 

@@ -22,9 +22,13 @@ const STUDIO_PRESETS = [
     guitar:  { type: "Electric + Acoustic", role: "Rhythm + Lead" },
     keys:    { type: "Piano / Hammond" },
     vocals:  { style: "Harmonized lead", range: "Tenor", singerStyle1: "Rock / Pop", singerArtist1: "The Beatles" },
-    lyrics:  { language: "Anglais", structure: "Couplet / Refrain", theme: "Love, storytelling" },
+    lyrics:  { language: "Anglais", structure: "intro, couplet-a, refrain, couplet-b, refrain, bridge, outro", theme: "Love, storytelling" },
     production: { atmosphere: "Warm / Vintage", reference: "60s Abbey Road", effects: ["reverb","tape"] },
-    mixMode: false
+    mixMode: false,
+    extras: [
+      { id: "guitar2", label: "Guitare 2", section: "guitar", style: "Acoustic arpeggios", role: "Texture", character: "Clean" },
+      { id: "strings", label: "Strings", section: "strings", style: "Quartet", role: "Pad", character: "Warm" }
+    ]
   },
   {
     id: "reggae-bob-marley",
@@ -40,9 +44,13 @@ const STUDIO_PRESETS = [
     guitar:  { type: "Skank rhythm", role: "Offbeat" },
     keys:    { type: "Organ shuffle" },
     vocals:  { style: "Laid back", range: "Baritone", singerStyle1: "Reggae", singerArtist1: "Bob Marley" },
-    lyrics:  { language: "Anglais", structure: "Verse / Chorus", theme: "Unity, resistance, love" },
+    lyrics:  { language: "Anglais", structure: "intro, verse, refrain, verse, refrain, bridge, refrain, outro", theme: "Unity, resistance, love" },
     production: { atmosphere: "Warm / sunny", reference: "Exodus 1977", effects: ["reverb","delay"] },
-    mixMode: false
+    mixMode: false,
+    extras: [
+      { id: "brass", label: "Brass", section: "brass", style: "Saxophone stabs", role: "Accent", character: "Warm" },
+      { id: "percussion", label: "Percussion", section: "percussion", style: "Shakers, congas", role: "Groove", character: "Organic" }
+    ]
   },
   {
     id: "funk-stevie-wonder",
@@ -58,9 +66,13 @@ const STUDIO_PRESETS = [
     guitar:  { type: "Clean rhythm + Wah solo", role: "Rhythm + Lead" },
     keys:    { type: "Clavinet / Hohner" },
     vocals:  { style: "Soulful", range: "Tenor", singerStyle1: "Funk", singerArtist1: "Stevie Wonder" },
-    lyrics:  { language: "Anglais", structure: "Verse / Chorus", theme: "Social consciousness, love" },
+    lyrics:  { language: "Anglais", structure: "intro, verse, refrain, verse, refrain, bridge, outro", theme: "Social consciousness, love" },
     production: { atmosphere: "Warm / punchy", reference: "Superstition 1972", effects: ["reverb","phaser"] },
-    mixMode: false
+    mixMode: false,
+    extras: [
+      { id: "brass", label: "Brass", section: "brass", style: "Trumpet / Sax riffs", role: "Hook", character: "Bright" },
+      { id: "clavinet2", label: "Clavinet 2", section: "keys", style: "Rhythmic chords", role: "Rhythm", character: "Punchy" }
+    ]
   },
   {
     id: "drill-gazo",
@@ -76,9 +88,13 @@ const STUDIO_PRESETS = [
     guitar:  { type: "Distorted delay", role: "Lead melodic" },
     keys:    { type: "Minimal synth pad" },
     vocals:  { style: "Auto‑tune melodio", range: "Autotune", singerStyle1: "Drill", singerArtist1: "Gazo" },
-    lyrics:  { language: "Français", structure: "Couplet rapide / Refrain énergique", theme: "Street life" },
+    lyrics:  { language: "Français", structure: "intro, couplet-a, refrain, couplet-b, refrain, bridge, refrain, outro", theme: "Street life" },
     production: { atmosphere: "Dark / melancholic night", reference: "SoundCloud Drill 2024", effects: ["reverb","delay"] },
-    mixMode: false
+    mixMode: false,
+    extras: [
+      { id: "synth2", label: "Synth 2", section: "synth", style: "Dark pad", role: "Atmosphere", character: "Darker" },
+      { id: "fx", label: "FX", section: "fx", style: "Tape stops, risers", role: "Transition", character: "Aggressive" }
+    ]
   },
   {
     id: "hip-hop-travis-scott",
@@ -94,9 +110,13 @@ const STUDIO_PRESETS = [
     guitar:  { type: "Distorted clean", role: "Side‑chained" },
     keys:    { type: "Side‑chained pads" },
     vocals:  { style: "Autotuned male", range: "Auto", singerStyle1: "Trap", singerArtist1: "Travis Scott" },
-    lyrics:  { language: "Anglais", structure: "Couplet / Refrain fort", theme: "Party, success, struggle" },
+    lyrics:  { language: "Anglais", structure: "intro, verse, refrain, verse, refrain, bridge, outro", theme: "Party, success, struggle" },
     production: { atmosphere: "Dark / gritty", reference: "Astroworld 2018", effects: ["reverb","delay"] },
-    mixMode: false
+    mixMode: false,
+    extras: [
+      { id: "synth2", label: "Synth 2", section: "synth", style: "Ambient pad", role: "Atmosphere", character: "Dark" },
+      { id: "fx", label: "FX", section: "fx", style: "Risers, impacts", role: "Transition", character: "Aggressive" }
+    ]
   },
   {
     id: "synthwave-kavinsky",
@@ -112,9 +132,13 @@ const STUDIO_PRESETS = [
     guitar:  { type: "Analog delay", role: "Lead" },
     keys:    { type: "Synth pads" },
     vocals:  { style: "Vocal chops / pitch", range: "Auto", singerStyle1: "Synthwave", singerArtist1: "Kavinsky" },
-    lyrics:  { language: "Anglais", structure: "Intro / Drop", theme: "Retro futuristic, night drive" },
+    lyrics:  { language: "Anglais", structure: "intro, verse, refrain, verse, refrain, bridge, outro", theme: "Retro futuristic, night drive" },
     production: { atmosphere: "Neon / cold", reference: "OutRun 2013", effects: ["delay","filter"] },
-    mixMode: false
+    mixMode: false,
+    extras: [
+      { id: "synth2", label: "Synth 2", section: "synth", style: "Arpeggiated lead", role: "Lead", character: "Bright" },
+      { id: "fx", label: "FX", section: "fx", style: "Gated reverb, reverse", role: "Atmosphere", character: "Retro" }
+    ]
   },
   {
     id: "afrobeat-burna-boy",
@@ -130,9 +154,13 @@ const STUDIO_PRESETS = [
     guitar:  { type: "Jazz‑fusion", role: "Solo impressionniste" },
     keys:    { type: "Synth pads / organ" },
     vocals:  { style: "Chant traditionnel + flow", range: "Baritone", singerStyle1: "Afrobeat", singerArtist1: "Burna Boy" },
-    lyrics:  { language: "Anglais / Pidgin", structure: "Verse / Refrain / Break", theme: "African pride, diaspora" },
+    lyrics:  { language: "Anglais / Pidgin", structure: "intro, verse, refrain, verse, refrain, bridge, refrain, outro", theme: "African pride, diaspora" },
     production: { atmosphere: "Vibrant / festive", reference: "African Giant 2019", effects: ["reverb","delay"] },
-    mixMode: false
+    mixMode: false,
+    extras: [
+      { id: "percussion", label: "Percussion", section: "percussion", style: "Djembe, congas", role: "Groove", character: "Organic" },
+      { id: "brass", label: "Brass", section: "brass", style: "Horn stabs", role: "Accent", character: "Warm" }
+    ]
   },
   {
     id: "house-dua-lipa",
@@ -148,9 +176,13 @@ const STUDIO_PRESETS = [
     guitar:  { type: "Disco guitar chops", role: "Accent" },
     keys:    { type: "Piano chords / synth stabs" },
     vocals:  { style: "Disco pop", range: "Mezzo-soprano", singerStyle1: "Pop", singerArtist1: "Dua Lipa" },
-    lyrics:  { language: "Anglais", structure: "Intro / Verse / Chorus", theme: "Love, dance, confidence" },
+    lyrics:  { language: "Anglais", structure: "intro, verse, refrain, verse, refrain, bridge, refrain, outro", theme: "Love, dance, confidence" },
     production: { atmosphere: "Clean / clinical", reference: "Future Nostalgia 2020", effects: ["delay","filter"] },
-    mixMode: false
+    mixMode: false,
+    extras: [
+      { id: "strings", label: "Strings", section: "strings", style: "Disco strings", role: "Hook", character: "Bright" },
+      { id: "synth2", label: "Synth 2", section: "synth", style: "Stabs", role: "Accent", character: "Sharp" }
+    ]
   },
   {
     id: "soul-marvin-gaye",
@@ -166,9 +198,13 @@ const STUDIO_PRESETS = [
     guitar:  { type: "Clean tone", role: "Rhythm" },
     keys:    { type: "Piano / Rhodes" },
     vocals:  { style: "Smooth soulful", range: "Baritone", singerStyle1: "Soul", singerArtist1: "Marvin Gaye" },
-    lyrics:  { language: "Anglais", structure: "Verse / Bridge / Chorus", theme: "Love, social issues" },
+    lyrics:  { language: "Anglais", structure: "intro, verse, refrain, verse, refrain, bridge, refrain, outro", theme: "Love, social issues" },
     production: { atmosphere: "Analog / warm", reference: "What's Going On 1971", effects: ["reverb","tape"] },
-    mixMode: false
+    mixMode: false,
+    extras: [
+      { id: "strings", label: "Strings", section: "strings", style: "Smooth section", role: "Pad", character: "Warm" },
+      { id: "brass", label: "Brass", section: "brass", style: "Muted trumpets", role: "Accent", character: "Smooth" }
+    ]
   },
   {
     id: "jazz-miles-davis",
@@ -184,9 +220,13 @@ const STUDIO_PRESETS = [
     guitar:  { type: "Plectrum", role: "Solo impressionniste" },
     keys:    { type: "Piano comping" },
     vocals:  { style: "Scat + lyrics", range: "Baritone", singerStyle1: "Jazz", singerArtist1: "Miles Davis" },
-    lyrics:  { language: "Anglais", structure: "Standards", theme: "Improvisation" },
+    lyrics:  { language: "Anglais", structure: "intro, verse, chorus, solo, outro", theme: "Improvisation" },
     production: { atmosphere: "Lounge / cool", reference: "Kind of Blue 1959", effects: ["reverb","delay"] },
-    mixMode: false
+    mixMode: false,
+    extras: [
+      { id: "brass", label: "Brass", section: "brass", style: "Trumpet lead", role: "Solo", character: "Cool" },
+      { id: "piano2", label: "Piano 2", section: "keys", style: "Comping", role: "Accompaniment", character: "Smooth" }
+    ]
   },
   {
     id: "metal-metallica",
@@ -202,9 +242,13 @@ const STUDIO_PRESETS = [
     guitar:  { type: "Solo LEAD", role: "Epic" },
     keys:    { type: "Organ pads" },
     vocals:  { style: "Cryl", range: "Full", singerStyle1: "Metal", singerArtist1: "Metallica" },
-    lyrics:  { language: "Anglais", structure: "Verse → Solo → Outro", theme: "Rites, rebellion" },
+    lyrics:  { language: "Anglais", structure: "intro, verse, refrain, solo, bridge, outro", theme: "Rites, rebellion" },
     production: { atmosphere: "Aggressive / violent", reference: "Master of Puppets 1986", effects: ["reverb","delay"] },
-    mixMode: false
+    mixMode: false,
+    extras: [
+      { id: "guitar2", label: "Guitare 2", section: "guitar", style: "Rhythm riffs", role: "Rhythm", character: "Distorted" },
+      { id: "strings", label: "Strings", section: "strings", style: "Orchestral hits", role: "Accent", character: "Epic" }
+    ]
   },
   {
     id: "orchestral-philharmonic",
@@ -220,9 +264,15 @@ const STUDIO_PRESETS = [
     guitar:  { type: "Harpe / Celesta", role: "Color" },
     keys:    { type: "Piano / Celesta" },
     vocals:  { style: "Operatic / Choir", range: "Full", singerStyle1: "Classique", singerArtist1: "" },
-    lyrics:  { language: "Latin / Allemand", structure: "Aria / Chorus", theme: "Epic, dramatic" },
+    lyrics:  { language: "Latin / Allemand", structure: "intro, exposition, development, recapitulation, outro", theme: "Epic, dramatic" },
     production: { atmosphere: "Grand / cathedral", reference: "Berlin Philharmonic", effects: ["reverb","hall"] },
-    mixMode: false
+    mixMode: false,
+    extras: [
+      { id: "strings", label: "Strings", section: "strings", style: "Full string section", role: "Main", character: "Rich" },
+      { id: "brass", label: "Brass", section: "brass", style: "French horns, trumpets", role: "Accent", character: "Majestic" },
+      { id: "percussion", label: "Percussion", section: "percussion", style: "Timpani, glockenspiel", role: "Accent", character: "Orchestral" },
+      { id: "woodwinds", label: "Woodwinds", section: "woodwinds", style: "Flutes, clarinets", role: "Color", character: "Ethereal" }
+    ]
   },
   {
     id: "opera",
@@ -235,12 +285,18 @@ const STUDIO_PRESETS = [
     drums:   { style: "Timpani, orchestral percussion", kit: "Orchestral", bpm: 80, groove: "Rubato", fills: false },
     harmony: { key: "C", mode: "major", progression: "Da capo aria", voicing: "Orchestral tutti" },
     bass:    { style: "Cello / Double bass", role: "Foundation", character: "Deep" },
-    guitar:  { type: "Harp", role: "Arpeggios" },
+    guitar:  { type: "Harp", role: "Arpèges" },
     keys:    { type: "Piano / Pipe organ" },
     vocals:  { style: "Bel canto", range: "Full opera", singerStyle1: "Opéra", singerArtist1: "" },
-    lyrics:  { language: "Italien / Français", structure: "Aria / Recitative", theme: "Tragedy, love, destiny" },
+    lyrics:  { language: "Italien / Français", structure: "recitative, aria, duet, finale", theme: "Tragedy, love, destiny" },
     production: { atmosphere: "Theatrical / hall", reference: "La Scala Milan", effects: ["reverb","hall"] },
-    mixMode: false
+    mixMode: false,
+    extras: [
+      { id: "strings", label: "Strings", section: "strings", style: "Violin leads", role: "Melody", character: "Dramatic" },
+      { id: "brass", label: "Brass", section: "brass", style: "Trombones, horns", role: "Power", character: "Majestic" },
+      { id: "choir", label: "Choir", section: "choir", style: "SATB", role: "Tutti", character: "Epic" },
+      { id: "pipe-organ", label: "Pipe Organ", section: "organ", style: "Grand organ", role: "Foundation", character: "Theatrical" }
+    ]
   }
 ];
 
@@ -322,7 +378,7 @@ function applyPresetToState(state, preset) {
     state.config = preset.config;
     state.style = preset.style;
     state.artist = preset.artist;
-    if (preset.drums) { state.drumStyle = preset.drums.style; state.drumBpm = preset.drums.bpm; }
+    if (preset.drums) { state.drumStyle = preset.drums.style; state.drumBpm = preset.drums.bpm; state.drumKit = preset.drums.kit || ""; state.drumGroove = preset.drums.groove || "straight"; state.drumFills = !!preset.drums.fills; }
     if (preset.harmony) { state.harmonyKey = preset.harmony.key; state.harmonyMode = preset.harmony.mode; state.harmonyProgression = preset.harmony.progression; state.harmonyVoicing = preset.harmony.voicing; }
     if (preset.bass) { state.bassStyle = preset.bass.style; state.bassRole = preset.bass.role; state.bassCharacter = preset.bass.character; }
     if (preset.guitar) { state.guitarType = preset.guitar.type; state.guitarRole = preset.guitar.role; }
@@ -331,6 +387,9 @@ function applyPresetToState(state, preset) {
     if (preset.lyrics) { state.lyricsLanguage = preset.lyrics.language; state.lyricsStructure = preset.lyrics.structure; state.lyricsTheme = preset.lyrics.theme; }
     if (preset.production) { state.productionAtmosphere = preset.production.atmosphere; state.productionReference = preset.production.reference; state.productionEffects = preset.production.effects || []; }
     if (preset.mixMode !== undefined) state.mixMode = preset.mixMode;
+    if (preset.extras && Array.isArray(preset.extras)) {
+        state.instrumentCards = preset.extras.map(extra => ({ ...extra }));
+    }
 }
 
 // ------------------------------------------------------------
