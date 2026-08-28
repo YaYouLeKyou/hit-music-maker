@@ -473,6 +473,28 @@ function handleAutoConfigure() {
 }
 
 
+function getAllGenres() {
+    if (typeof ARTISTS_DATABASE === "undefined") return [];
+    const genres = new Set();
+    ARTISTS_DATABASE.forEach(artist => {
+        if (artist.genre) {
+            genres.add(artist.genre.trim());
+        }
+    });
+    return Array.from(genres).sort((a, b) => a.localeCompare(b, "fr"));
+}
+
+function getArtistsByGenre(genre) {
+    if (typeof ARTISTS_DATABASE === "undefined") return [];
+    if (!genre) return ARTISTS_DATABASE;
+    const lower = genre.toLowerCase();
+    return ARTISTS_DATABASE.filter(artist => {
+        const g = (artist.genre || "").toLowerCase();
+        return g.includes(lower);
+    });
+}
+
+
 function populateStyleSelect() {
     const select = $("style-select");
     if (!select) return;
