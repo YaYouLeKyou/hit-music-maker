@@ -40,27 +40,63 @@ const BLOCK_COLORS = {
 const STYLE_PRESETS = [
     {
         label: "Afro-Pop / Aya Nakamura Style",
+        key: "afro-pop",
         value: "afro-pop, 102 BPM, female french vocals, catchy melodic hooks, log drum, afrobeat percussion, modern pop production, radio-ready mix"
     },
     {
         label: "Cyberpunk Synthwave",
+        key: "synthwave",
         value: "synthwave, 110 BPM, dark analog synths, retro 80s drums, neon atmosphere, male vocals with reverb, cyberpunk aesthetic, cinematic"
     },
     {
         label: "Acoustic Pop-Rock",
+        key: "acoustic pop-rock",
         value: "acoustic pop-rock, 124 BPM, strummed acoustic guitar, live drums, warm male vocals, anthemic chorus, organic production, stadium energy"
     },
     {
         label: "Rap / Trap FR",
+        key: "french drill",
         value: "french trap, 140 BPM, 808 bass, hi-hat rolls, dark piano melody, autotuned male rap vocals, drill influence, hard-hitting"
     },
     {
         label: "Ballade Piano",
+        key: "piano ballad",
         value: "emotional piano ballad, 68 BPM, grand piano, strings, soft female vocals, intimate, cinematic build-up, heartfelt"
     },
     {
         label: "EDM Festival",
+        key: "edm",
         value: "progressive house EDM, 128 BPM, big drop, supersaw synths, festival energy, female topline vocals, euphoric, club mix"
+    },
+    {
+        label: "Reggaeton Latin",
+        key: "reggaeton",
+        value: "latin reggaeton, 96 BPM, dem bow, latin percussion, bright synths, sensual male vocals, summer vibe"
+    },
+    {
+        label: "Classic Soul",
+        key: "classic soul",
+        value: "classic soul, 82 BPM, gospel piano, walking bass, horns, powerful female vocal, vintage, warm"
+    },
+    {
+        label: "Dub Reggae",
+        key: "dub reggae",
+        value: "dub reggae, 80 BPM, reverb-heavy guitar, deep bass, echo effects, laid-back groove, roots"
+    },
+    {
+        label: "Heavy Metal",
+        key: "heavy metal",
+        value: "heavy metal, 140 BPM, distorted guitars, double kick drums, aggressive vocals, raw energy"
+    },
+    {
+        label: "Bossa Nova",
+        key: "bossa nova",
+        value: "bossa nova, 88 BPM, nylon guitar, gentle percussion, smooth male vocals, romantic, brasil"
+    },
+    {
+        label: "Chanson Française",
+        key: "french chanson",
+        value: "french chanson, 96 BPM, acoustic guitar, accordion, piano, poetic male vocal, timeless"
     }
 ];
 
@@ -2079,6 +2115,16 @@ function switchTab(tab) {
 
 function initPresets() {
     const container = $("preset-buttons");
+    const styleSelect = $("style-select");
+    if (styleSelect) {
+        styleSelect.innerHTML = '<option value="">— Tous les artistes —</option>';
+        STYLE_PRESETS.forEach(preset => {
+            const option = document.createElement("option");
+            option.value = preset.value;
+            option.textContent = preset.label;
+            styleSelect.appendChild(option);
+        });
+    }
     STYLE_PRESETS.forEach(preset => {
         const btn = document.createElement("button");
         btn.className = "px-3 py-1.5 rounded-full text-xs font-semibold bg-purple-900/60 hover:bg-fuchsia-600 border border-purple-700/60 transition-all duration-200 cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-400";
@@ -2087,7 +2133,7 @@ function initPresets() {
             $("style-prompt").value = preset.value;
             state.stylePrompt = preset.value;
             saveStudioState();
-            toast(`Style « ${preset.label} » appliqué.`, "info");
+            toast(`Style « ${preset.label } » appliqué.`, "info");
         });
         container.appendChild(btn);
     });
@@ -2245,10 +2291,12 @@ function init() {
     $("style-select").addEventListener("change", (e) => {
         const selectedValue = e.target.value;
         if (selectedValue) {
+            const preset = STYLE_PRESETS.find(p => p.value === selectedValue);
+            const filterKey = preset ? preset.key : selectedValue;
             // Remplit le champ manuel avec le style sélectionné
             $("gen-style").value = selectedValue;
             // Filtre les artistes par style
-            populateArtistSelect(selectedValue);
+            populateArtistSelect(filterKey);
             // Affiche aussi dans le textarea de style prompt si vide
             if (!$("style-prompt").value.trim()) {
                 $("style-prompt").value = selectedValue;
