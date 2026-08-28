@@ -530,7 +530,7 @@ app.post("/api/generate", async (req, res) => {
             provider: selectedProvider,
             artist: artist ? artist.name : "none",
             isAutoMode: Boolean(isAutoMode),
-            theme: theme.slice(0, 60)
+            theme: typeof theme === "string" ? theme.slice(0, 60) : ""
         });
 
         /**
