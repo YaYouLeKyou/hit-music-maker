@@ -2118,10 +2118,11 @@ function initPresets() {
     const styleSelect = $("style-select");
     if (styleSelect) {
         styleSelect.innerHTML = '<option value="">— Tous les artistes —</option>';
-        STYLE_PRESETS.forEach(preset => {
+        const genres = getAllGenres();
+        genres.forEach(genre => {
             const option = document.createElement("option");
-            option.value = preset.value;
-            option.textContent = preset.label;
+            option.value = genre;
+            option.textContent = genre;
             styleSelect.appendChild(option);
         });
     }
@@ -2137,6 +2138,17 @@ function initPresets() {
         });
         container.appendChild(btn);
     });
+}
+
+function getAllGenres() {
+    if (typeof ARTISTS_DATABASE === "undefined") return [];
+    const genres = new Set();
+    ARTISTS_DATABASE.forEach(artist => {
+        if (artist.genre) {
+            genres.add(artist.genre.trim());
+        }
+    });
+    return Array.from(genres).sort((a, b) => a.localeCompare(b, "fr"));
 }
 
 /** Style-to-genre mapping for artist filtering */
@@ -2168,13 +2180,11 @@ function populateArtistSelect(filterStyle = null) {
     let artistsToShow = ARTISTS_DATABASE;
     
     if (filterStyle) {
-        const filterGenres = STYLE_GENRE_MAP[filterStyle.toLowerCase()] || [];
-        if (filterGenres.length > 0) {
-            artistsToShow = ARTISTS_DATABASE.filter(artist => {
-                const genreLower = artist.genre.toLowerCase();
-                return filterGenres.some(fg => genreLower.includes(fg.toLowerCase()));
-            });
-        }
+        const filterLower = filterStyle.toLowerCase();
+        artistsToShow = ARTISTS_DATABASE.filter(artist => {
+            const genreLower = artist.genre.toLowerCase();
+            return genreLower.includes(filterLower);
+        });
     }
 
     const groups = {
