@@ -41,6 +41,7 @@ let state = {
     lyricsStructure: "auto",
     lyricsTheme: "",
     lyricsText: "",
+    lyricsBlocks: [],
     productionAtmosphere: "",
     productionReference: "",
     productionEffects: ["reverb"],
@@ -909,6 +910,187 @@ function removeInstrumentCard(id) {
 }
 
 // ============================================================
+// Création détaillée des paroles (blocs, comme Studio)
+// ============================================================
+
+const LYRICS_BLOCK_TYPES = ["Intro", "Couplet 1", "Couplet 2", "Pré-refrain", "Refrain", "Pont", "Outro"];
+
+const LYRICS_BLOCK_ICONS = {
+    "Intro": "fa-play",
+    "Couplet 1": "fa-microphone-lines",
+    "Couplet 2": "fa-microphone-lines",
+    "Pré-refrain": "fa-arrow-trend-up",
+    "Refrain": "fa-star",
+    "Pont": "fa-bridge",
+    "Outro": "fa-flag-checkered"
+};
+
+const LYRICS_BLOCK_COLORS = {
+    "Intro": "border-sky-500/60",
+    "Couplet 1": "border-purple-500/60",
+    "Couplet 2": "border-purple-500/60",
+    "Pré-refrain": "border-amber-500/60",
+    "Refrain": "border-fuchsia-500/70",
+    "Pont": "border-teal-500/60",
+    "Outro": "border-rose-500/60"
+};
+
+// Formate les blocs comme dans Studio : [Type]\ntexte
+function buildLyricsFromBlocks() {
+    return (state.lyricsBlocks || [])
+        .map(b => "[" + b.type + "]\n" + String(b.text || "").trim())
+        .join("\n\n");
+}
+
+function updateLyricsPreview() {
+    const previewEl = $("lyrics-preview");
+    if (!previewEl) return;
+    const text = buildLyricsFromBlocks();
+    previewEl.textContent = text || "— L'aperçu de vos paroles apparaîtra ici —";
+}
+
+function normalizeLyricsBlocks(blocks) {
+    if (!Array.isArray(blocks)) return [];
+    return blocks
+        .filter(b => b && typeof b === "object")
+        .map(b => ({
+            type: typeof b.type === "string" && b.type ? b.type : "Couplet 1",
+            text: typeof b.text === "string" ? b.text : ""
+        }));
+}
+
+function renderLyricsBlocks() {
+    state.lyricsBlocks = normalizeLyricsBlocks(state.lyricsBlocks);
+    const container = $("lyrics-blocks-container");
+    const emptyEl = $("lyrics-blocks-empty");
+    if (!container) return;
+
+    container.innerHTML = state.lyricsBlocks.map((block, index) => {
+        const icon = LYRICS_BLOCK_ICONS[block.type] || "fa-music";
+        const color = LYRICS_BLOCK_COLORS[block.type] || "border-purple-500/60";
+        const options = LYRICS_BLOCK_TYPES.map(t =>
+            `<option value="${escapeHtml(t)}" ${t === block.type ? "selected" : ""}>${escapeHtml(t)}</option>`
+        ).join("");
+        return `
+        <div class="block-card rounded-xl bg-[#221d42] border-l-4 ${color} border border-purple-900/50 p-4 shadow-md" data-block-index="${index}">
+            <div class="flex items-center gap-2 mb-2">
+                <i class="fa-solid ${icon} text-fuchsia-400"></i>
+                <select data-block-action="type" data-block-index="${index}" class="flex-1 rounded-md bg-night border border-purple-900/60 p-1.5 text-sm outline-none focus:border-fuchsia-500">${options}</select>
+                <button type="button" data-block-action="up" data-block-index="${index}" title="Monter" class="w-8 h-8 rounded-md bg-purple-900/50 hover:bg-purple-700 transition text-sm disabled:opacity-40 disabled:cursor-not-allowed" ${index === 0 ? "disabled" : ""}><i class="fa-solid fa-arrow-up"></i></button>
+                <button type="button" data-block-action="down" data-block-index="${index}" title="Descendre" class="w-8 h-8 rounded-md bg-purple-900/50 hover:bg-purple-700 transition text-sm disabled:opacity-40 disabled:cursor-not-allowed" ${index === state.lyricsBlocks.length - 1 ? "disabled" : ""}><i class="fa-solid fa-arrow-down"></i></button>
+                <button type="button" data-block-action="delete" data-block-index="${index}" title="Supprimer" class="w-8 h-8 rounded-md bg-red-900/50 hover:bg-red-700 transition text-sm"><i class="fa-solid fa-trash"></i></button>
+            </div>
+            <textarea data-block-action="text" data-block-index="${index}" rows="3" placeholder="Écrivez les paroles de cette section..."
+                class="w-full rounded-lg bg-[#0f0f1a] border border-purple-800/70 p-3 text-sm leading-relaxed outline-none focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/30 font-mono">${escapeHtml(block.text)}</textarea>
+        </div>`;
+    }).join("");
+
+    if (emptyEl) emptyEl.classList.toggle("hidden", state.lyricsBlocks.length > 0);
+    updateLyricsPreview();
+}
+
+function moveLyricsBlock(index, direction) {
+    const target = index + direction;
+    if (target < 0 || target >= state.lyricsBlocks.length) return;
+    const [moved] = state.lyricsBlocks.splice(index, 1);
+    state.lyricsBlocks.splice(target, 0, moved);
+    renderLyricsBlocks();
+    saveState();
+}
+
+function addLyricsBlock(type) {
+    state.lyricsBlocks.push({ type: LYRICS_BLOCK_TYPES.includes(type) ? type : "Couplet 1", text: "" });
+    renderLyricsBlocks();
+    saveState();
+    const container = $("lyrics-blocks-container");
+    if (container && container.lastElementChild) {
+        container.lastElementChild.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+}
+
+// Sauvegarde différée pendant la frappe (évite d'écrire le localStorage à chaque touche)
+let lyricsSaveTimer = null;
+function scheduleLyricsSave() {
+    if (lyricsSaveTimer) clearTimeout(lyricsSaveTimer);
+    lyricsSaveTimer = setTimeout(() => {
+        lyricsSaveTimer = null;
+        saveState();
+    }, 400);
+}
+
+function initLyricsBlocks() {
+    document.querySelectorAll(".add-lyrics-block").forEach(btn => {
+        btn.addEventListener("click", () => addLyricsBlock(btn.dataset.blockType));
+    });
+
+    const skeletonBtn = $("btn-lyrics-skeleton");
+    if (skeletonBtn) {
+        skeletonBtn.addEventListener("click", () => {
+            state.lyricsBlocks = [
+                { type: "Intro", text: "" },
+                { type: "Couplet 1", text: "" },
+                { type: "Refrain", text: "" },
+                { type: "Couplet 2", text: "" },
+                { type: "Refrain", text: "" },
+                { type: "Pont", text: "" },
+                { type: "Outro", text: "" }
+            ];
+            renderLyricsBlocks();
+            saveState();
+            toast("Squelette de paroles créé — remplissez chaque section.", "success");
+        });
+    }
+
+    const clearBtn = $("btn-lyrics-clear");
+    if (clearBtn) {
+        clearBtn.addEventListener("click", () => {
+            if (state.lyricsBlocks.length === 0) return;
+            state.lyricsBlocks = [];
+            renderLyricsBlocks();
+            saveState();
+        });
+    }
+
+    // Délégation d'événements pour les cartes de blocs
+    const container = $("lyrics-blocks-container");
+    if (container) {
+        container.addEventListener("click", (e) => {
+            const btn = e.target.closest("[data-block-action]");
+            if (!btn) return;
+            const index = parseInt(btn.dataset.blockIndex, 10);
+            const action = btn.dataset.blockAction;
+            if (action === "up") moveLyricsBlock(index, -1);
+            else if (action === "down") moveLyricsBlock(index, 1);
+            else if (action === "delete") {
+                state.lyricsBlocks.splice(index, 1);
+                renderLyricsBlocks();
+                saveState();
+            }
+        });
+        container.addEventListener("change", (e) => {
+            const el = e.target.closest("[data-block-action]");
+            if (!el || el.dataset.blockAction !== "type") return;
+            const index = parseInt(el.dataset.blockIndex, 10);
+            if (state.lyricsBlocks[index]) {
+                state.lyricsBlocks[index].type = el.value;
+                renderLyricsBlocks();
+                saveState();
+            }
+        });
+        container.addEventListener("input", (e) => {
+            const el = e.target.closest("[data-block-action]");
+            if (!el || el.dataset.blockAction !== "text") return;
+            const index = parseInt(el.dataset.blockIndex, 10);
+            if (state.lyricsBlocks[index]) {
+                state.lyricsBlocks[index].text = el.value;
+                updateLyricsPreview();
+                scheduleLyricsSave();
+            }
+        });
+    }
+}
+
+// ============================================================
 // Synchronisation UI <-> state
 // ============================================================
 // Assembleur de prompt Suno
@@ -975,13 +1157,15 @@ function assemblePrompt() {
         parts.push(`Chant : ${vocalParts.join(", ")}`);
     }
 
-    if (!state.instrumentalOnly && (state.lyricsLanguage || state.lyricsStructure !== "auto" || state.lyricsTheme || state.lyricsText)) {
+    if (!state.instrumentalOnly && (state.lyricsLanguage || state.lyricsStructure !== "auto" || state.lyricsTheme || state.lyricsText || (state.lyricsBlocks && state.lyricsBlocks.length > 0))) {
         const lyricsParts = [];
         if (state.lyricsLanguage) lyricsParts.push(`langue : ${state.lyricsLanguage}`);
         if (state.lyricsStructure !== "auto") lyricsParts.push(`structure : ${state.lyricsStructure}`);
         if (state.lyricsTheme) lyricsParts.push(`thème : ${state.lyricsTheme}`);
-        if (state.lyricsText) lyricsParts.push(`paroles : ${state.lyricsText}`);
         parts.push(`Paroles : ${lyricsParts.join(", ")}`);
+        // Paroles complètes : les blocs détaillés sont prioritaires, sinon le texte libre
+        const lyricsFullText = buildLyricsFromBlocks() || state.lyricsText;
+        if (lyricsFullText) parts.push(lyricsFullText);
     }
 
     if (state.productionAtmosphere || state.productionReference || state.productionEffects.length > 0) {
@@ -1122,6 +1306,7 @@ const setChecked = (id, val) => { const el = $(id); if (el) el.checked = val; };
     setVal("lyrics-structure", state.lyricsStructure);
     setVal("lyrics-theme", state.lyricsTheme);
     setVal("lyrics-text", state.lyricsText);
+    renderLyricsBlocks();
 
     setVal("production-atmosphere", state.productionAtmosphere);
     setVal("production-reference", state.productionReference);
@@ -1464,6 +1649,7 @@ function init() {
                 state.lyricsStructure = "intro, couplet-a, refrain, couplet-b, refrain, bridge, outro";
                 state.lyricsTheme = "";
                 state.lyricsText = "";
+                state.lyricsBlocks = [];
                 syncUiFromState();
             }
             saveState();
@@ -1475,6 +1661,7 @@ function init() {
     bind("lyrics-structure", "lyricsStructure");
     bind("lyrics-theme", "lyricsTheme");
     bind("lyrics-text", "lyricsText");
+    initLyricsBlocks();
 
     // Production
     bind("production-atmosphere", "productionAtmosphere");
