@@ -1382,16 +1382,16 @@ function assemblePrompt() {
         parts.push(`Chant : ${vocalParts.join(", ")}`);
     }
 
-    if (!state.instrumentalOnly && (state.lyricsLanguage || state.lyricsStructure !== "auto" || state.lyricsTheme || state.lyricsText || (state.lyricsBlocks && state.lyricsBlocks.length > 0))) {
-        const lyricsParts = [];
-        if (state.lyricsLanguage) lyricsParts.push(`langue : ${state.lyricsLanguage}`);
-        if (state.lyricsStructure !== "auto") lyricsParts.push(`structure : ${state.lyricsStructure}`);
-        if (state.lyricsTheme) lyricsParts.push(`thème : ${state.lyricsTheme}`);
-        parts.push(`Paroles : ${lyricsParts.join(", ")}`);
-        // Paroles complètes : les blocs détaillés sont prioritaires, sinon le texte libre
-        // (seuls les blocs réellement remplis alimentent le prompt Suno)
+    if (!state.instrumentalOnly) {
         const lyricsFullText = buildLyricsFromBlocks(true) || state.lyricsText;
-        if (lyricsFullText) parts.push(lyricsFullText);
+        if (lyricsFullText) {
+            const lyricsParts = [];
+            if (state.lyricsLanguage) lyricsParts.push(`langue : ${state.lyricsLanguage}`);
+            if (state.lyricsStructure !== "auto") lyricsParts.push(`structure : ${state.lyricsStructure}`);
+            if (state.lyricsTheme) lyricsParts.push(`thème : ${state.lyricsTheme}`);
+            parts.push(`Paroles : ${lyricsParts.join(", ")}`);
+            parts.push(lyricsFullText);
+        }
     }
 
     if (state.productionAtmosphere || state.productionReference || state.productionEffects.length > 0) {
