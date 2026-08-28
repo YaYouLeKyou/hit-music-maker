@@ -2416,6 +2416,18 @@ function init() {
 
     // --- Onglets ---
     $("tab-studio").addEventListener("click", () => switchTab("studio"));
+    const tabStudioPro = $("tab-studio-pro");
+    if (tabStudioPro) {
+        tabStudioPro.addEventListener("click", () => {
+            window.location.href = "studio-pro.html";
+        });
+    }
+    const tabDjPro = $("tab-dj-pro");
+    if (tabDjPro) {
+        tabDjPro.addEventListener("click", () => {
+            window.location.href = "dj-pro.html";
+        });
+    }
     $("tab-history").addEventListener("click", () => switchTab("history"));
     const tabPublished = $("tab-published");
     if (tabPublished) {

@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DJ Pro - Music Hit Maker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root { --deck-a: #ec4899; --deck-b: #8b5cf6; --accent: #06b6d4; }
+        body { background: #0f0f1a; }
+        .deck-card { background: linear-gradient(180deg, rgba(26,26,46,0.9) 0%, rgba(15,15,26,0.95) 100%); border: 1px solid rgba(139,92,246,0.25); transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease; }
+        .deck-card.active { transform: translateY(-4px); box-shadow: 0 25px 50px rgba(0,0,0,0.45); border-color: var(--accent) !important; }
+        .waveform { height: 56px; border-radius: 999px; opacity: .85; position: relative; overflow: hidden; }
+        .waveform-a { background: linear-gradient(90deg, #ec4899, #f97316, #fbbf24); }
+        .waveform-b { background: linear-gradient(90deg, #8b5cf6, #3b82f6, #06b6d4); }
+        .waveform.playing::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.35) 50%, transparent 100%); animation: wave 1.8s linear infinite; }
+        @keyframes wave { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+        .knob { width: 56px; height: 56px; border-radius: 50%; background: conic-gradient(from 220deg, #1e1e3f 0deg, #2d2d5a 180deg, #1e1e3f 360deg); border: 2px solid #4a4a7a; box-shadow: inset 0 2px 4px rgba(0,0,0,0.6), 0 4px 10px rgba(0,0,0,0.5); cursor: pointer; position: relative; }
+        .knob::after { content: ""; position: absolute; top: 6px; left: 50%; transform: translateX(-50%); width: 3px; height: 12px; background: #fbbf24; border-radius: 2px; }
+        .vinyl { animation: spin 3s linear infinite; }
+        .vinyl.paused { animation-play-state: paused; }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+        .led { width: 10px; height: 10px; border-radius: 50%; background: #333; box-shadow: inset 0 1px 2px rgba(0,0,0,0.6); }
+        .led.on { background: #22c55e; box-shadow: 0 0 8px #22c55e, inset 0 1px 2px rgba(255,255,255,0.4); }
+        .jingle-card { background: linear-gradient(135deg, rgba(236,72,153,0.08), rgba(139,92,246,0.08)); border: 1px solid rgba(139,92,246,0.35); transition: transform .15s ease, border-color .15s ease; }
+        .jingle-card:hover { transform: translateY(-2px); border-color: rgba(236,72,153,0.6); }
+        .meter { height: 6px; border-radius: 3px; background: #1e1e3f; overflow: hidden; }
+        .meter-fill { height: 100%; border-radius: 3px; transition: width .25s ease; }
+        .mixer-strip { background: linear-gradient(180deg, rgba(26,26,46,0.8) 0%, rgba(15,15,26,0.9) 100%); border: 1px solid rgba(139,92,246,0.25); }
+        .btn-glow { box-shadow: 0 0 15px rgba(236,72,153,0.35); }
+        .btn-glow:hover { box-shadow: 0 0 25px rgba(236,72,153,0.55); }
+        .crosshair { position: absolute; top: 50%; left: 50%; width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.35); border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; }
+        .crosshair::after { content: ""; position: absolute; top: 50%; left: 0; right: 0; height: 1px; background: rgba(255,255,255,0.35); transform: translateY(-50%); }
+        .crosshair::before { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: rgba(255,255,255,0.35); transform: translateX(-50%); }
+    </style>
+</head>
+<body class="text-gray-100 min-h-screen">
+    <nav class="bg-[#1a1a2e] border-b border-purple-900/50 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center gap-4">
+                    <a href="index.html" class="text-fuchsia-400 hover:text-fuchsia-300 transition"><i class="fa-solid fa-arrow-left mr-2"></i>Retour</a>
+                    <h1 class="text-xl font-bold bg-gradient-to-r from-fuchsia-400 to-purple-500 bg-clip-text text-transparent"><i class="fa-solid fa-record-vinyl mr-2"></i>DJ Pro</h1>
+                </div>
+                <div class="flex items-center gap-3">
+                    <nav class="flex items-center gap-2">
+                        <a href="index.html" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white transition"><i class="fa-solid fa-sliders mr-1"></i>Studio</a>
+                        <a href="studio-pro.html" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white transition"><i class="fa-solid fa-wand-magic-sparkles mr-1"></i>Studio Pro</a>
+                        <button class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-gradient-to-r from-fuchsia-600 to-purple-600 text-white shadow-md shadow-fuchsia-600/25"><i class="fa-solid fa-record-vinyl mr-1"></i>DJ Pro</button>
+                    </nav>
+                    <span id="dj-mode-label" class="text-xs font-semibold uppercase tracking-wider text-slate-300">Mode Auto</span>
+                    <button id="btn-toggle-mode" class="px-3 py-1.5 rounded-lg bg-fuchsia-600/80 hover:bg-fuchsia-500 text-white text-xs font-semibold transition">Basculer Auto/Manuel</button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+        <!-- Style & contexte -->
+        <section class="bg-[#1a1a2e] rounded-xl border border-purple-800/50 p-6">
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+                <div class="md:col-span-2">
+                    <label class="block text-xs font-medium text-gray-400 mb-1">Style DJ</label>
+                    <select id="dj-style" class="w-full rounded-lg bg-[#0f0f1a] border border-purple-800/70 px-3 py-2 text-sm"></select>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-400 mb-1">Vibe</label>
+                    <select id="dj-vibe" class="w-full rounded-lg bg-[#0f0f1a] border border-purple-800/70 px-3 py-2 text-sm">
+                        <option value="chill">Chill</option>
+                        <option value="groove" selected>Groove</option>
+                        <option value="energetic">Energetic</option>
+                        <option value="party">Party</option>
+                        <option value="dark">Dark</option>
+                        <option value="retro">Retro</option>
+                        <option value="trance">Trance</option>
+                        <option value="global">Global</option>
+                        <option value="smooth">Smooth</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-400 mb-1">Durée cible</label>
+                    <select id="dj-duration" class="w-full rounded-lg bg-[#0f0f1a] border border-purple-800/70 px-3 py-2 text-sm">
+                        <option value="30">30 min</option>
+                        <option value="60" selected>60 min</option>
+                        <option value="90">90 min</option>
+                    </select>
+                </div>
+                <div class="flex items-end">
+                    <button id="btn-auto-mix" class="w-full py-2 rounded-lg bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500 text-white text-sm font-bold transition btn-glow"><i class="fa-solid fa-bolt mr-1"></i>Auto-Mix</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Decks + Mixer central -->
+        <section class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Deck A -->
+            <div id="deck-a" class="deck-card rounded-2xl p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-2">
+                        <div class="led" id="led-a"></div>
+                        <h2 class="text-lg font-bold"><i class="fa-solid fa-compact-disc text-pink-400 mr-2"></i>Deck A</h2>
+                    </div>
+                    <span class="text-[11px] font-mono text-slate-400 border border-purple-700/60 rounded px-2 py-1">A</span>
+                </div>
+                <div class="waveform waveform-a mb-4 flex items-center px-4">
+                    <div class="crosshair"></div>
+                </div>
+                <div class="space-y-3">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-400 mb-1">Piste</label>
+                        <select id="deck-a-select" class="w-full rounded-lg bg-[#0f0f1a] border border-purple-800/70 px-3 py-2 text-sm"></select>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2 text-xs text-slate-300">
+                        <div class="bg-[#0f0f1a] rounded-lg p-2 border border-purple-900/60"><span class="block text-slate-500">BPM</span><span id="deck-a-bpm" class="font-mono">--</span></div>
+                        <div class="bg-[#0f0f1a] rounded-lg p-2 border border-purple-900/60"><span class="block text-slate-500">Key</span><span id="deck-a-key" class="font-mono">--</span></div>
+                        <div class="bg-[#0f0f1a] rounded-lg p-2 border border-purple-900/60"><span class="block text-slate-500">Energy</span><span id="deck-a-energy" class="font-mono">--</span></div>
+                    </div>
+                    <div class="flex gap-2">
+                        <button id="btn-deck-a-play" class="flex-1 py-2 rounded-lg bg-pink-600/80 hover:bg-pink-500 text-white text-xs font-semibold transition"><i class="fa-solid fa-play mr-1"></i>Play</button>
+                        <button id="btn-deck-a-scrape" class="px-3 py-2 rounded-lg bg-purple-700/40 hover:bg-purple-600/50 text-xs font-semibold transition"><i class="fa-solid fa-globe"></i></button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Mixer central -->
+            <div class="mixer-strip rounded-2xl p-6 flex flex-col items-center gap-5">
+                <div class="w-full flex items-center justify-between">
+                    <div class="text-xs font-semibold text-slate-300">A</div>
+                    <div class="text-xs font-semibold text-slate-300">B</div>
+                </div>
+                <div class="relative w-full flex items-center justify-center">
+                    <div class="knob" id="crossfader" title="Crossfader"></div>
+                    <div class="crosshair"></div>
+                </div>
+                <div class="text-[11px] text-slate-400 text-center">Crossfader</div>
+
+                <div class="w-full space-y-3">
+                    <div>
+                        <div class="flex justify-between text-[11px] text-slate-400 mb-1"><span>Volume A</span><span id="vol-a-val">80%</span></div>
+                        <input id="vol-a" type="range" min="0" max="100" value="80" class="w-full">
+                    </div>
+                    <div>
+                        <div class="flex justify-between text-[11px] text-slate-400 mb-1"><span>Volume B</span><span id="vol-b-val">80%</span></div>
+                        <input id="vol-b" type="range" min="0" max="100" value="80" class="w-full">
+                    </div>
+                </div>
+
+                <button id="btn-master-play" class="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 hover:from-emerald-500 hover:via-teal-500 hover:to-cyan-500 text-white text-sm font-bold transition btn-glow"><i class="fa-solid fa-play mr-1"></i>Play / Stop</button>
+
+                <div class="w-full grid grid-cols-3 gap-2 text-center text-[11px] text-slate-400">
+                    <div class="bg-[#0f0f1a] rounded-lg p-2 border border-purple-900/60"><span class="block text-slate-500">BPM</span><span id="master-bpm" class="font-mono text-slate-200">--</span></div>
+                    <div class="bg-[#0f0f1a] rounded-lg p-2 border border-purple-900/60"><span class="block text-slate-500">Key</span><span id="master-key" class="font-mono text-slate-200">--</span></div>
+                    <div class="bg-[#0f0f1a] rounded-lg p-2 border border-purple-900/60"><span class="block text-slate-500">Energy</span><span id="master-energy" class="font-mono text-slate-200">--</span></div>
+                </div>
+            </div>
+
+            <!-- Deck B -->
+            <div id="deck-b" class="deck-card rounded-2xl p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-2">
+                        <div class="led" id="led-b"></div>
+                        <h2 class="text-lg font-bold"><i class="fa-solid fa-record-vinyl text-purple-400 mr-2"></i>Deck B</h2>
+                    </div>
+                    <span class="text-[11px] font-mono text-slate-400 border border-purple-700/60 rounded px-2 py-1">B</span>
+                </div>
+                <div class="waveform waveform-b mb-4 flex items-center px-4">
+                    <div class="crosshair"></div>
+                </div>
+                <div class="space-y-3">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-400 mb-1">Piste suivante</label>
+                        <select id="deck-b-select" class="w-full rounded-lg bg-[#0f0f1a] border border-purple-800/70 px-3 py-2 text-sm"></select>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2 text-xs text-slate-300">
+                        <div class="bg-[#0f0f1a] rounded-lg p-2 border border-purple-900/60"><span class="block text-slate-500">BPM</span><span id="deck-b-bpm" class="font-mono">--</span></div>
+                        <div class="bg-[#0f0f1a] rounded-lg p-2 border border-purple-900/60"><span class="block text-slate-500">Key</span><span id="deck-b-key" class="font-mono">--</span></div>
+                        <div class="bg-[#0f0f1a] rounded-lg p-2 border border-purple-900/60"><span class="block text-slate-500">Energy</span><span id="deck-b-energy" class="font-mono">--</span></div>
+                    </div>
+                    <div class="flex gap-2">
+                        <button id="btn-deck-b-play" class="flex-1 py-2 rounded-lg bg-purple-600/80 hover:bg-purple-500 text-white text-xs font-semibold transition"><i class="fa-solid fa-play mr-1"></i>Play</button>
+                        <button id="btn-deck-b-suggest" class="px-3 py-2 rounded-lg bg-fuchsia-700/40 hover:bg-fuchsia-600/50 text-xs font-semibold transition"><i class="fa-solid fa-wand-magic-sparkles"></i></button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Jingles + Scraping -->
+        <section class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Jingles -->
+            <div class="lg:col-span-2 bg-[#1a1a2e] rounded-xl border border-purple-800/50 p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-lg font-bold"><i class="fa-solid fa-music text-amber-400 mr-2"></i>Jingles &amp; Transitions</h2>
+                    <button id="btn-regen-jingles" class="px-3 py-1.5 rounded-lg bg-amber-600/80 hover:bg-amber-500 text-white text-xs font-semibold transition"><i class="fa-solid fa-arrows-rotate mr-1"></i>Régénérer</button>
+                </div>
+                <div id="jingles-list" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+            </div>
+
+            <!-- Scraping -->
+            <div class="bg-[#1a1a2e] rounded-xl border border-purple-800/50 p-6">
+                <h2 class="text-lg font-bold mb-3"><i class="fa-solid fa-globe text-cyan-400 mr-2"></i>Scraping</h2>
+                <p class="text-xs text-slate-400 mb-3">Enrichir la base avec des titres compatibles avec le style sélectionné.</p>
+                <button id="btn-scrape-enrich" class="w-full py-2 rounded-lg bg-cyan-600/80 hover:bg-cyan-500 text-white text-xs font-semibold transition mb-2"><i class="fa-solid fa-spider mr-1"></i>Lancer le scraping</button>
+                <div id="scrape-status" class="text-[11px] text-slate-400">Prêt</div>
+                <div id="scrape-results" class="mt-3 space-y-2 text-xs"></div>
+            </div>
+        </section>
+
+        <!-- Tracklist + Publish -->
+        <section class="bg-[#1a1a2e] rounded-xl border border-purple-800/50 p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-bold"><i class="fa-solid fa-list-ol text-emerald-400 mr-2"></i>Tracklist du set</h2>
+                <div class="flex gap-2">
+                    <button id="btn-clear-set" class="px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-semibold transition"><i class="fa-solid fa-broom mr-1"></i>Vider</button>
+                    <button id="btn-publish-set" class="px-3 py-2 rounded-lg bg-emerald-600/80 hover:bg-emerald-500 text-white text-xs font-semibold transition"><i class="fa-solid fa-paper-plane mr-1"></i>Publier le set</button>
+                </div>
+            </div>
+            <div id="set-list" class="space-y-2 text-sm"></div>
+            <div id="set-empty" class="text-center py-8 text-slate-400 text-xs">Aucune piste pour l’instant. Ajoutez des titres dans les decks ou lancez l’Auto-Mix.</div>
+        </section>
+    </main>
+
+    <footer class="text-center text-xs text-slate-500 py-8">
+        <div class="flex justify-center gap-5 mb-3">
+            <a href="https://www.facebook.com/profile.php?id=61593299775056&locale=fr_FR" target="_blank" rel="noopener" class="flex items-center justify-center w-10 h-10 rounded-xl bg-panel border border-purple-700/50 text-slate-300 hover:text-fuchsia-400 hover:border-fuchsia-500/50 transition-all duration-200"><i class="fa-brands fa-facebook-f text-lg"></i></a>
+            <a href="https://www.instagram.com/music.hit.maker/" target="_blank" rel="noopener" class="flex items-center justify-center w-10 h-10 rounded-xl bg-panel border border-purple-700/50 text-slate-300 hover:text-fuchsia-400 hover:border-fuchsia-500/50 transition-all duration-200"><i class="fa-brands fa-instagram text-lg"></i></a>
+        </div>
+        Music Hit Maker Studio — Propulsé par Groq · Optimisé pour Suno & Udio
+    </footer>
+
+    <div id="toast-container" class="fixed bottom-5 right-5 z-[60] space-y-2"></div>
+
+    <script src="artistes_presets.js"></script>
+    <script src="dj_styles.js"></script>
+    <script src="dj-pro.js"></script>
+</body>
+</html>

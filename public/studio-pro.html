@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Studio Pro - Music Hit Maker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #0f0f1a; }
+        ::-webkit-scrollbar-thumb { background: #333355; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #4a4a7a; }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-slide-in { animation: slideIn 0.4s ease-out; }
+
+        input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            height: 6px;
+            background: #1e1e3f;
+            border-radius: 3px;
+            outline: none;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            background: #ec4899;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid #fff;
+        }
+        input[type="range"]::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            background: #ec4899;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid #fff;
+        }
+
+        .config-card { transition: all 0.3s ease; }
+        .config-card:hover { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
+        .config-card.active { border-color: #ec4899 !important; box-shadow: 0 0 20px rgba(236, 72, 153, 0.3); }
+
+        .section-panel { display: none; }
+        .section-panel.active { display: block; animation: slideIn 0.3s ease-out; }
+
+        .prompt-preview { font-family: 'Courier New', monospace; line-height: 1.6; }
+
+        .custom-checkbox {
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border: 2px solid #4a4a7a;
+            border-radius: 4px;
+            background: #0f0f1a;
+            cursor: pointer;
+            position: relative;
+        }
+        .custom-checkbox:checked { background: #ec4899; border-color: #ec4899; }
+        .custom-checkbox:checked::after {
+            content: '✓';
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 12px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body class="bg-[#0f0f1a] text-gray-100 min-h-screen">
+    <nav class="bg-[#1a1a2e] border-b border-purple-900/50 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center gap-4">
+                    <a href="index.html" class="text-fuchsia-400 hover:text-fuchsia-300 transition"><i class="fa-solid fa-arrow-left mr-2"></i>Retour</a>
+                    <h1 class="text-xl font-bold bg-gradient-to-r from-fuchsia-400 to-purple-500 bg-clip-text text-transparent"><i class="fa-solid fa-sliders mr-2"></i>Studio Pro</h1>
+                </div>
+                <nav class="flex items-center gap-2">
+                    <a href="index.html" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white transition"><i class="fa-solid fa-sliders mr-1"></i>Studio</a>
+                    <button class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-gradient-to-r from-fuchsia-600 to-purple-600 text-white shadow-md shadow-fuchsia-600/25"><i class="fa-solid fa-wand-magic-sparkles mr-1"></i>Studio Pro</button>
+                    <a href="dj-pro.html" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white transition"><i class="fa-solid fa-record-vinyl mr-1"></i>DJ Pro</a>
+                </nav>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Studio Presets Section -->
+    <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div class="bg-[#1a1a2e] rounded-xl border border-purple-800/50 p-6">
+            <h2 class="text-lg font-bold mb-4 text-gray-200">
+                <i class="fa-solid fa-wand-magic-sparkles text-fuchsia-400 mr-2"></i>Configuration type
+            </h2>
+            <div class="flex flex-wrap gap-3 mb-4">
+                <button class="studio-preset-chip px-4 py-2 rounded-lg bg-purple-600/80 hover:bg-purple-500 text-sm font-semibold transition" data-preset="beatles">The Beatles</button>
+                <button class="studio-preset-chip px-4 py-2 rounded-lg bg-purple-600/80 hover:bg-purple-500 text-sm font-semibold transition" data-preset="drill-parisien">Drill Parisien</button>
+                <button class="studio-preset-chip px-4 py-2 rounded-lg bg-purple-600/80 hover:bg-purple-500 text-sm font-semibold transition" data-preset="synthwave-80s">Synthwave 80s</button>
+                <button class="studio-preset-chip px-4 py-2 rounded-lg bg-purple-600/80 hover:bg-purple-500 text-sm font-semibold transition" data-preset="afrobeat-cotonou">Afrobeat Cotonou</button>
+                <button class="studio-preset-chip px-4 py-2 rounded-lg bg-purple-600/80 hover:bg-purple-500 text-sm font-semibold transition" data-preset="psytrance-peak">Psytrance Peak</button>
+                <button class="studio-preset-chip px-4 py-2 rounded-lg bg-purple-600/80 hover:bg-purple-500 text-sm font-semibold transition" data-preset="house-parisien">House Parisien</button>
+                <button class="studio-preset-chip px-4 py-2 rounded-lg bg-purple-600/80 hover:bg-purple-500 text-sm font-semibold transition" data-preset="drill-atlanta">Drill Atlanta</button>
+                <button class="studio-preset-chip px-4 py-2 rounded-lg bg-purple-600/80 hover:bg-purple-500 text-sm font-semibold transition" data-preset="vintage-soul">Vintage Soul</button>
+                <button class="studio-preset-chip px-4 py-2 rounded-lg bg-purple-600/80 hover:bg-purple-500 text-sm font-semibold transition" data-preset="reggaeton-caribe">Reggaeton Caribe</button>
+                <button class="studio-preset-chip px-4 py-2 rounded-lg bg-purple-600/80 hover:bg-purple-500 text-sm font-semibold transition" data-preset="kpop-fusion">K-Pop Fusion</button>
+                <button class="studio-preset-chip px-4 py-2 rounded-lg bg-purple-600/80 hover:bg-purple-500 text-sm font-semibold transition" data-preset="metal-epic">Metal Epic</button>
+                <button class="studio-preset-chip px-4 py-2 rounded-lg bg-purple-600/80 hover:bg-purple-500 text-sm font-semibold transition" data-preset="jazz-modern">Jazz Moderne</button>
+            </div>
+            <div class="flex items-center gap-4">
+                <span class="text-xs text-slate-400">Ou sélectionnez depuis la base d'artistes</span>
+                <select id="artist-preset-select" class="flex-1 rounded-lg bg-[#0f0f1a] border border-purple-800/70 px-3 py-2 text-sm">
+                    <option value="">-- Choisir un artiste --</option>
+                </select>
+            </div>
+        </div>
+    </section>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+        <!-- Configuration musicale -->
+        <section class="bg-[#1a1a2e] rounded-xl border border-purple-800/50 p-6">
+            <h2 class="text-lg font-bold mb-4 text-gray-200">
+                <i class="fa-solid fa-layer-group text-fuchsia-400 mr-2"></i>Configuration musicale
+            </h2>
+            <p class="text-xs text-gray-400 mb-4">Sélectionnez d'abord une configuration d'ensemble, puis un style/genre présent dans la base.</p>
+            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 mb-4">
+                <button data-config="solo" class="config-card active bg-[#1a1a2e] border-2 border-purple-800/50 rounded-xl p-4 text-center cursor-pointer hover:border-fuchsia-500/50">
+                    <i class="fa-solid fa-guitar text-2xl mb-2 text-fuchsia-400"></i>
+                    <div class="font-semibold text-sm">Solo</div>
+                </button>
+                <button data-config="duo" class="config-card bg-[#1a1a2e] border-2 border-purple-800/50 rounded-xl p-4 text-center cursor-pointer hover:border-fuchsia-500/50">
+                    <i class="fa-solid fa-user-group text-2xl mb-2 text-purple-400"></i>
+                    <div class="font-semibold text-sm">Duo</div>
+                </button>
+                <button data-config="band" class="config-card bg-[#1a1a2e] border-2 border-purple-800/50 rounded-xl p-4 text-center cursor-pointer hover:border-fuchsia-500/50">
+                    <i class="fa-solid fa-drum text-2xl mb-2 text-pink-400"></i>
+                    <div class="font-semibold text-sm">Band</div>
+                </button>
+                <button data-config="orchestra" class="config-card bg-[#1a1a2e] border-2 border-purple-800/50 rounded-xl p-4 text-center cursor-pointer hover:border-fuchsia-500/50">
+                    <i class="fa-solid fa-music text-2xl mb-2 text-blue-400"></i>
+                    <div class="font-semibold text-sm">Orchestre</div>
+                </button>
+                <button data-config="opera" class="config-card bg-[#1a1a2e] border-2 border-purple-800/50 rounded-xl p-4 text-center cursor-pointer hover:border-fuchsia-500/50">
+                    <i class="fa-solid fa-microphone-lines text-2xl mb-2 text-red-400"></i>
+                    <div class="font-semibold text-sm">Opéra</div>
+                </button>
+                <button data-config="urban" class="config-card bg-[#1a1a2e] border-2 border-purple-800/50 rounded-xl p-4 text-center cursor-pointer hover:border-fuchsia-500/50">
+                    <i class="fa-solid fa-headphones text-2xl mb-2 text-green-400"></i>
+                    <div class="font-semibold text-sm">Urbain</div>
+                </button>
+                <button data-config="reggae" class="config-card bg-[#1a1a2e] border-2 border-purple-800/50 rounded-xl p-4 text-center cursor-pointer hover:border-fuchsia-500/50">
+                    <i class="fa-solid fa-sun text-2xl mb-2 text-yellow-400"></i>
+                    <div class="font-semibold text-sm">Reggae</div>
+                </button>
+                <button data-config="rock" class="config-card bg-[#1a1a2e] border-2 border-purple-800/50 rounded-xl p-4 text-center cursor-pointer hover:border-fuchsia-500/50">
+                    <i class="fa-solid fa-bolt text-2xl mb-2 text-orange-400"></i>
+                    <div class="font-semibold text-sm">Rock</div>
+                </button>
+                <button data-config="electronic" class="config-card bg-[#1a1a2e] border-2 border-purple-800/50 rounded-xl p-4 text-center cursor-pointer hover:border-fuchsia-500/50">
+                    <i class="fa-solid fa-wave-square text-2xl mb-2 text-cyan-400"></i>
+                    <div class="font-semibold text-sm">Électro</div>
+                </button>
+                <button data-config="jazz" class="config-card bg-[#1a1a2e] border-2 border-purple-800/50 rounded-xl p-4 text-center cursor-pointer hover:border-fuchsia-500/50">
+                    <i class="fa-solid fa-martini-glass text-2xl mb-2 text-amber-400"></i>
+                    <div class="font-semibold text-sm">Jazz</div>
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-medium text-gray-400 mb-1">Style / Genre (depuis la base)</label>
+                    <select id="style-select" class="w-full rounded-lg bg-[#0f0f1a] border border-purple-800/70 px-3 py-2 text-sm outline-none focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/30 cursor-pointer">
+                        <option value="">— Tous les styles —</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-400 mb-1">Artiste de référence</label>
+                    <select id="artist-style" class="w-full rounded-lg bg-[#0f0f1a] border border-purple-800/70 px-3 py-2 text-sm outline-none focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/30 cursor-pointer">
+                        <option value="">— Choisissez un artiste —</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Mode Mix -->
+            <div class="mt-4 rounded-xl border border-purple-800/60 bg-purple-900/20 p-4">
+                <label class="flex items-center gap-2 cursor-pointer mb-3">
+                    <input type="checkbox" id="mix-mode-toggle" class="w-4 h-4 rounded border-purple-700 bg-[#0f0f1a] text-fuchsia-500 focus:ring-fuchsia-500">
+                    <span class="text-sm font-semibold text-gray-200"><i class="fa-solid fa-shuffle mr-1 text-fuchsia-400"></i>Mode Mix</span>
+                </label>
+                <p class="text-xs text-gray-400 mb-3">Sélectionnez 2 à 3 styles et 2 à 3 artistes. L'IA mélangera les genres, les thèmes et les références pour créer un titre hybride original.</p>
+
+                <div id="mix-style-group" class="hidden space-y-2 mb-3">
+                    <label class="block text-xs font-medium text-gray-300">Styles additionnels</label>
+                    <select id="mix-style-2" class="w-full rounded-lg bg-[#0f0f1a] border border-purple-800/70 px-3 py-2 text-sm outline-none focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/30 cursor-pointer">
+                        <option value="">— Style 2 —</option>
+                    </select>
+                    <select id="mix-style-3" class="w-full rounded-lg bg-[#0f0f1a] border border-purple-800/70 px-3 py-2 text-sm outline-none focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/30 cursor-pointer">
+                        <option value="">— Style 3 (optionnel) —</option>
+                    </select>
+                </div>
+
+                <div id="mix-artist-group" class="hidden space-y-2">
+                    <label class="block text-xs font-medium text-gray-300">Artistes additionnels</label>
+                    <select id="mix-artist-2" class="w-full rounded-lg bg-[#0f0f1a] border border-purple-800/70 px-3 py-2 text-sm outline-none focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/30 cursor-pointer">
+                        <option value="">— Artiste 2 —</option>
+                    </select>
+                    <select id="mix-artist-3" class="w-full rounded-lg bg-[#0f0f1a] border border-purple-800/70 px-3 py-2 text-sm outline-none focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/30 cursor-pointer">
+                        <option value="">— Artiste 3 (optionnel) —</option>
+                    </select>
+                </div>
+            </div>
+        </section>
+
+        <!-- Prompt Builders -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Drums & Rhythm -->
+            <div class="bg-[#1a1a2e] rounded-xl border border-purple-800/50 p-6">
+                <h3 class="text-md font-bold mb-4 text-gray-200">
+                    <i class="fa-solid fa-drum text-pink-400 mr-2"></i>Rythme & Batterie
+                </h3>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-400 mb-1">Style de batterie</label>
+                        <select id="drum-style" class="w-full rounded-lg bg-[#0f0f1a] border border-purple-800/70 px-3 py-2 text-sm">
+                            <option value="">-- Choisir --</option>
+                            <option value="acoustic rock">Acoustic Rock</option>
+                            <option value="electronic">Electronic / EDM</option>
+                            <option value="hip-hop">Hip-Hop / Trap</option>
+                            <option value="jazz">Jazz</option>
+                            <option value="latin">Latin / Reggaeton</option>
+                            <option value="metal">Metal</option>
+                            <option value="punk">Punk</option>
+                            <option value="reggae">Reggae / One Drop</option>
+                            <option value="funk">Funk</option>
+                            <option value="orchestral">Orchestral / Timpani</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-400 mb-1">Kit / Configuration</label>
+                        <select id="drum-kit" class="w-full rounded-lg bg-[#0f0f1a] border border-purple-800/70 px-3 py-2 text-sm">
+                            <option value="">-- Choisir --</option>
+                            <option value="standard rock">Standard Rock</option>
+                            <option value="jazz setup">Jazz Setup</option>
+                            <option value="electronic pads">Electronic Pads</option>
+                            <option value="latin percussion">Latin Percussion</option>
+                            <option value="orchestral percussion">Orchestral Percussion</option>
+                            <option value="minimal">Minimal</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-400 mb-1">BPM</label>
+                        <input type="range" id="drum-bpm" min="60" max="200" value="120" class="w-full">
+                        <div class="flex justify-between text-xs text-gray-500 mt-1">
+                            <span>60</span>
+                            <span id="drum-bpm-value">120</span>
+                            <span>200</span>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-400 mb-1">Groove / Feel</label>
+                        <select id="drum-groove" class="w-full rounded-lg bg-[#0f0f1a] border border-purple-800/70 px-3 py-2 text-sm">
+                            <option value="straight">Straight</option>
+                            <option value="swing">Swing</option>
+                            <option value="shuffle">Shuffle</option>
+                            <option value="half-time">Half-Time</option>
+                            <option value="double-time">Double-Time</option>
+                            <option value="breakbeat">Breakbeat</option>
+                        </select>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <input type="checkbox" id="drum-fills" class="custom-checkbox">
+                        <label for="drum-fills" class="text-xs text-gray-300">Inclure fills & breaks</label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Harmony & Chords -->
+            <div class="bg-[#1a1a2e] rounded-xl border border-purple-800/50 p-6">
+                <h3 class="text-md font-bold mb-4 text-gray-200">
+                    <i class="fa-solid fa-music text-blue-400 mr-2"></i>Harmonie & Accords
+                </h3>
+                <div class="space-y-4">
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs font-medium text-gray-400 mb-1">Tonalité</label>
+                            <select id="harmony-key" class="w-full rounded-lg bg-[#0f0f1a] border border-purple-800/70 px-3 py-2 text-sm">
+                                <option value="">--</option>
+                                <option>C</option><option>C#</option><option>D</option><option>D#</option>
+                                <option>E</option><option>F</option><option>F#</option><option>G</option>
+                                <option>G#</option><option>A</option><option>A#</option><option>B</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-400 mb-1">Mode</label>
+                            <select id="harmony-mode" class="w-full rounded-lg bg-[#0f0f1a] border border-purple-800/70 px-3 py-2 text-sm">
+                                <option value="major">Major</option>
+                                <option value="minor">Minor</option>
+                                <option value="dorian">Dorian</option>
+                                <option value="mixolydian">Mixolydian</option>
+                                <option value="blues">Blues</option>
+                                <option value="pentatonic">Pentatonic</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-400 mb-1">Progression d'accords</label>
+                        <select id="harmony-progression" class="w-full rounded-lg bg-[#0f0f1a] border border-purple-800/70 px-3 py-2 text-sm">
+                            <option value="auto">Automatique</option>
+                            <option value="I-V-vi-IV">Pop classique (I-V-vi-IV)</option>
+                            <option value="ii-V-I">Jazz (ii-V-I)</option>
+                            <option value="I-vi-IV-V">50s (I-vi-IV-V)</option>
+                            <option value="i-VI-III-VII">Rock mineur</option>
+                            <option value="i-bVII-bVI-bVII">Rock alternatif</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-400 mb-1">Voicings</label>
+                        <select id="harmony-voicing" class="w-full rounded-lg bg-[#0f0f1a] border border-purple-800/70 px-3 py-2 text-sm">
+                            <option value="auto">Automatique</option>
+                            <option value="open">Open chords</option>
+                            <option value="close">Close position</option>
+                            <option value="drop2">Drop 2</option>
+                            <option value="shells">Shells (piano)</option>
+                            <option value="block">Block chords</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bass -->
+            <div class="bg-[#1a1a2e] rounded-xl border border-purple-800/50 p-6">
+                <h3 class="text-md font-bold mb-4 text-gray-200">
+                    <i class="fa-solid fa-wave-square text-green-400 mr-2"></i>Basse
+                </h3>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-400 mb-1">Style de basse</label>
+                        <select id="bass-style" class="w-full rounded-lg bg-[#0f0f1a] border border-purple-800/70 px-3 py-2 text-sm">
+                            <option value="">-- Choisir --</option>
+                            <option value="fingerstyle">Fingerstyle</option>
+                            <option value="pick">Pick</option>
+                            <option value="slap">Slap</option>
+                            <option value="synth bass">Synth Bass</option>
+                            <option value="upright">Upright / Double bass</option>
+                            <option value="fretless">Fretless</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-400 mb-1">Rôle</label>
+                        <select id="bass-role" class="w-full rounded-lg bg-[#0f0f1a] border border-purple-800/70 px-3 py-2 text-sm">
+                            <option value="groove">Groove / Foundation</option>
+                            <option value="lead">Lead / Melodic</option>
+                            <option value="sub">Sub Bass (808)</option>
+                            <option value="counterpoint">Counterpoint</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-400 mb-1">Caractère</label>
+                        <select id="bass-character" class="w-full rounded-lg bg-[#0f0f1a] border border-purple-800/70 px-3 py-2 text-sm">
+                            <option value="warm">Warm / Round</option>
+                            <option value="aggressive">Aggressive / Punchy</option>
+                            <option value="smooth">Smooth / Subtle</option>
+                            <option value="funky">Funky / Groovy</option>
+                            <option value="deep">Deep / Subby</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Guitares & Claviers -->
+            <div class="bg-[#1a1a2e] rounded-xl border border-purple-800/50 p-6">
+                <h3 class="text-md font-bold mb-4 text-gray-200">
+                    <i class="fa-solid fa-guitar text-purple-400 mr-2"></i>Guitares & Claviers
+                </h3>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-400 mb-1">Guitare principale</label>
+                        <select id="guitar-type" class="w-full rounded-lg bg-[#0f0f1a] border border-purple-800/70 px-3 py-2 text-sm">
+                            <option value="">-- Choisir --</option>
+                            <optgroup label="Électrique">
+                                <option value="fender stratocaster">Fender Stratocaster</option>
+                                <option value="fender telecaster">Fender Telecaster</option>
+                                <option value="gibson les paul">Gibson Les Paul</option>
+                                <option value="gibson sg">Gibson SG</option>
+                                <option value="ibanez rg">Ibanez RG (Shred)</option>
+                                <option value="prs">PRS</option>
+                            </optgroup>
+                            <optgroup label="Acoustique">
+                                <option value="steel string">Steel String Acoustic</option>
+                                <option value="nylon string">Nylon String / Classical</option>
+                                <option value="12-string">12-String</option>
+                            </optgroup>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-400 mb-1">Rôle guitare</label>
+                        <select id="guitar-role" class="w-full rounded-lg bg-[#0f0f1a] border border-purple-800/70 px-3 py-2 text-sm">
+                            <option value="rhythm">Accompagnement / Rhythm</option>
+                            <option value="solo">Solo / Lead</option>
+                            <option value="both">Solo + Accompagnement</option>
+                            <option value="arp">Arpèges</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-400 mb-1">Claviers / Piano</label>
+                        <select id="keys-type" class="w-full rounded-lg bg-[#0f0f1a] border border-purple-800/70 px-3 py-2 text-sm">
+                            <option value="">-- Choisir --</option>
+                            <option value="grand piano">Grand Piano</option>
+                            <option value="electric piano">Electric Piano (Rhodes/Wurlitzer)</option>
+                            <option value="organ">Organ (Hammond)</option>
+                            <option value="synth">Synthesizer</option>
+                            <option value="pad">Pad / Atmosphere</option>
+                            <option value="none">Aucun</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Vocals & Singer -->
+            <div class="bg-[#1a1a2e] rounded-xl border border-purple-800/50 p-6">
+                <h3 class="text-md font-bold mb-4 text-gray-200">
+                    <i class="fa-solid fa-microphone text-red-400 mr-2"></i>Chant & Vocal
+                </h3>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-400 mb-1">Style vocal</label>
+                        <select id="vocal-style" class="w-full rounded-lg bg-[#0f0f1a] border border-purple-800/70 px-3 py-2 text-sm">
+                            <option value="">-- Choisir --</option>
+                            <option value="lead vocals">Lead Vocals</option>
+                            <option value="backing vocals">Backing Vocals</option>
+                            <option value="rap">Rap / Spoken</option>
+                            <option value="choir">Choir / Ensemble</option>
+                            <option value="opera">Opera</option>
+                            <option value="whisper">Whisper / ASMR</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-400 mb-1">Tessiture</label>
+                        <select id="vocal-range" class="w-full rounded-lg bg-[#0f0f1a] border border-purple-800/70 px-3 py-2 text-sm">
+                            <option value="auto">Automatique</option>
+                            <option value="bass">Basse</option>
+                            <option value="baritone">Baryton</option>
+                            <option value="tenor">Ténor</option>
+                            <option value="alto">Alto</option>
+                            <option value="soprano">Soprano</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-400 mb-1">Créateur de chanteur (mix)</label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <select id="singer-style-1" class="rounded-lg bg-[#0f0f1a] border border-purple-800/70 px-2 py-1.5 text-xs">
+                                <option value="">Style 1</option>
+                            </select>
+                            <select id="singer-style-2" class="rounded-lg bg-[#0f0f1a] border border-purple-800/70 px-2 py-1.5 text-xs">
+                                <option value="">Style 2</option>
+                            </select>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2 mt-2">
+                            <select id="singer-artist-1" class="rounded-lg bg-[#0f0f1a] border border-purple-800/70 px-2 py-1.5 text-xs">
+                                <option value="">Artiste 1</option>
+                            </select>
+                            <select id="singer-artist-2" class="rounded-lg bg-[#0f0f1a] border border-purple-800/70 px-2 py-1.5 text-xs">
+                                <option value="">Artiste 2</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Lyrics & Production -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Lyrics -->
+            <div class="bg-[#1a1a2e] rounded-xl border border-purple-800/50 p-6">
+                <h3 class="text-md font-bold mb-4 text-gray-200">
+                    <i class="fa-solid fa-pen-fancy text-amber-400 mr-2"></i>Paroles
+                </h3>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-400 mb-1">Langue</label>
+                        <select id="lyrics-language" class="w-full rounded-lg bg-[#0f0f1a] border border-purple-800/70 px-3 py-2 text-sm">
+                            <option value="fr">Français</option>
+                            <option value="en">English</option>
+                            <option value="es">Español</option>
+                            <option value="auto">Automatique (selon artiste)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-400 mb-1">Structure</label>
+                        <select id="lyrics-structure" class="w-full rounded-lg bg-[#0f0f1a] border border-purple-800/70 px-3 py-2 text-sm">
+                            <option value="auto">Automatique</option>
+                            <option value="verse-chorus">Verse - Chorus</option>
+                            <option value="verse-chorus-bridge">Verse - Chorus - Bridge</option>
+                            <option value="aaba">AABA</option>
+                            <option value="through-composed">Through-composed</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-400 mb-1">Thème / Histoire</label>
+                        <textarea id="lyrics-theme" rows="3" placeholder="Décrivez le thème, l'histoire, les émotions..."
+                            class="w-full rounded-lg bg-[#0f0f1a] border border-purple-800/70 px-3 py-2 text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/30"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-400 mb-1">Texte des paroles (optionnel)</label>
+                        <textarea id="lyrics-text" rows="4" placeholder="Collez ou écrivez vos paroles ici..."
+                            class="w-full rounded-lg bg-[#0f0f1a] border border-purple-800/70 px-3 py-2 text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/30 font-mono"></textarea>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Production & Mix -->
+            <div class="bg-[#1a1a2e] rounded-xl border border-purple-800/50 p-6">
+                <h3 class="text-md font-bold mb-4 text-gray-200">
+                    <i class="fa-solid fa-sliders text-cyan-400 mr-2"></i>Production & Mix
+                </h3>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-400 mb-1">Ambiance</label>
+                        <select id="production-atmosphere" class="w-full rounded-lg bg-[#0f0f1a] border border-purple-800/70 px-3 py-2 text-sm">
+                            <option value="">-- Choisir --</option>
+                            <option value="clean">Clean / Polished</option>
+                            <option value="warm">Warm / Vintage</option>
+                            <option value="dark">Dark / Moody</option>
+                            <option value="bright">Bright / Shiny</option>
+                            <option value="lo-fi">Lo-Fi / Dusty</option>
+                            <option value="cinematic">Cinematic / Epic</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-400 mb-1">Référence sonore</label>
+                        <select id="production-reference" class="w-full rounded-lg bg-[#0f0f1a] border border-purple-800/70 px-3 py-2 text-sm">
+                            <option value="">-- Choisir --</option>
+                            <option value="modern pop">Modern Pop (2020s)</option>
+                            <option value="classic rock">Classic Rock (70s-80s)</option>
+                            <option value="hip-hop">Hip-Hop / Trap</option>
+                            <option value="jazz">Jazz / Blue Note</option>
+                            <option value="electronic">Electronic / Daft Punk</option>
+                            <option value="orchestral">Orchestral / Hans Zimmer</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-400 mb-1">Effets principaux</label>
+                        <div id="production-effects" class="flex flex-wrap gap-2">
+                            <label class="flex items-center gap-1.5 text-xs text-gray-300">
+                                <input type="checkbox" class="custom-checkbox" value="reverb" checked> Réverb
+                            </label>
+                            <label class="flex items-center gap-1.5 text-xs text-gray-300">
+                                <input type="checkbox" class="custom-checkbox" value="delay"> Delay
+                            </label>
+                            <label class="flex items-center gap-1.5 text-xs text-gray-300">
+                                <input type="checkbox" class="custom-checkbox" value="chorus"> Chorus
+                            </label>
+                            <label class="flex items-center gap-1.5 text-xs text-gray-300">
+                                <input type="checkbox" class="custom-checkbox" value="distortion"> Distortion
+                            </label>
+                            <label class="flex items-center gap-1.5 text-xs text-gray-300">
+                                <input type="checkbox" class="custom-checkbox" value="compression"> Compression
+                            </label>
+                            <label class="flex items-center gap-1.5 text-xs text-gray-300">
+                                <input type="checkbox" class="custom-checkbox" value="tape"> Tape Saturation
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Final Prompt Output -->
+        <section class="bg-[#1a1a2e] rounded-xl border border-purple-800/50 p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-bold text-gray-200">
+                    <i class="fa-solid fa-wand-magic-sparkles text-fuchsia-400 mr-2"></i>Prompt Final Suno
+                </h2>
+                <div class="flex gap-2">
+                    <button id="btn-assemble" class="px-4 py-2 rounded-lg bg-fuchsia-600 hover:bg-fuchsia-500 text-white text-sm font-semibold transition">
+                        <i class="fa-solid fa-hammer mr-1"></i>Assembler
+                    </button>
+                    <button id="btn-copy-final" class="px-4 py-2 rounded-lg bg-green-600 hover:bg-green-500 text-white text-sm font-semibold transition">
+                        <i class="fa-regular fa-copy mr-1"></i>Copier
+                    </button>
+                </div>
+            </div>
+            <textarea id="final-prompt" rows="12" readonly
+                class="w-full rounded-lg bg-[#0f0f1a] border border-purple-900/60 p-4 text-sm prompt-preview text-gray-300 resize-y"
+                placeholder="Le prompt final assemblé apparaîtra ici..."></textarea>
+            <p id="prompt-status" class="text-xs text-gray-500 mt-2"></p>
+        </section>
+
+        <!-- ---------- CTA final : Générer ma musique (via Suno) ---------- -->
+        <div class="panel-card-cta lg:col-span-3 mt-2 rounded-2xl bg-gradient-to-r from-fuchsia-800/40 via-purple-800/30 to-indigo-800/40 border border-fuchsia-500/50 p-8 text-center shadow-2xl">
+            <h2 class="text-2xl font-bold mb-2 bg-gradient-to-r from-fuchsia-300 to-cyan-300 bg-clip-text text-transparent">
+                <i class="fa-solid fa-rocket mr-2"></i>Prêt à lancer votre hit ?
+            </h2>
+            <p class="text-sm sm:text-base text-gray-300 mb-6 max-w-3xl mx-auto">
+                Composez votre chanson dans le studio, puis partagez-la avec le monde entier.
+                Deux options s'offrent à vous : choisissez celle qui correspond à votre besoin :
+            </p>
+
+            <!-- 2 lignes x 2 colonnes : publication/création + communauté sur laptop, 1 col sur mobile -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-2 text-left">
+
+                <!-- 1. Publier en direct (payant) -->
+                <div class="rounded-xl border border-emerald-500/40 bg-emerald-500/5 p-4 flex flex-col">
+                    <button id="btn-generate-music"
+                        class="inline-flex items-center justify-center gap-3 px-6 py-4 rounded-xl text-base font-extrabold text-white bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 hover:from-emerald-500 hover:via-teal-500 hover:to-cyan-500 transition shadow-[0_0_30px_rgba(34,211,160,0.45)] hover:shadow-[0_0_45px_rgba(34,211,160,0.7)] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed w-full">
+                        <i class="fa-solid fa-paper-plane mr-1"></i>Publier en direct
+                    </button>
+                    <p class="font-bold text-emerald-300 text-sm mt-3 mb-1.5">
+                        Publication automatique <span class="ml-1 text-emerald-400 font-normal text-xs">payant</span>
+                    </p>
+                    <p class="text-xs text-slate-300 leading-relaxed flex-1">
+                        Le style et les paroles sont envoyés automatiquement à Suno.
+                        La musique générée est publiée directement sur les pages
+                        <span class="font-semibold text-slate-100">Music Hit Maker</span> de nos réseaux sociaux,
+                        avec la pochette et le texte du post.
+                        <span class="block mt-1 text-slate-400">Crédits de génération Suno inclus — <span class="text-emerald-400 font-semibold">1,99 €</span> par publication.</span>
+                    </p>
+                </div>
+
+                <!-- 2. Upload & Publier (gratuit) -->
+                <div class="rounded-xl border border-orange-500/40 bg-orange-500/5 p-4 flex flex-col">
+                    <button id="btn-upload-publish"
+                        class="inline-flex items-center justify-center gap-3 px-6 py-4 rounded-xl text-base font-extrabold text-white bg-gradient-to-r from-amber-600 via-orange-600 to-red-600 hover:from-amber-500 hover:via-orange-500 hover:to-red-500 transition shadow-[0_0_30px_rgba(249,115,22,0.45)] hover:shadow-[0_0_45px_rgba(249,115,22,0.7)] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed w-full">
+                        <i class="fa-solid fa-upload mr-1"></i>Upload &amp; Publier
+                    </button>
+                    <p class="font-bold text-orange-300 text-sm mt-3 mb-1.5">
+                        Publication personnalisée
+                        <span class="ml-1 inline-block align-middle text-[10px] font-extrabold uppercase tracking-wider rounded-full px-2 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-400/40">Gratuit</span>
+                    </p>
+                    <p class="text-xs text-slate-300 leading-relaxed flex-1">
+                        Copiez/collez vous-même le prompt style et le prompt lyrics dans Suno,
+                        créez votre musique, téléchargez-la ou copiez le lien Suno dans la
+                        fenêtre qui s'ouvre lorsque vous cliquez sur « Upload &amp; Publier » :
+                        collez le lien direct ou téléversez (uploadez) votre MP3.
+                        L'application génère la pochette par IA, rédige le texte du post
+                        (que vous pouvez modifier) et publie le tout sur nos pages
+                        Facebook et Instagram.
+                        <span class="block mt-1 text-slate-400">Aucun crédit de génération requis.</span>
+                    </p>
+                </div>
+
+                <!-- 3. Suno / Udio (liens externes) -->
+                <div class="rounded-xl border border-purple-500/40 bg-purple-500/5 p-4 flex flex-col">
+                    <div class="grid grid-cols-2 gap-2">
+                        <a href="https://suno.com" target="_blank" rel="noopener"
+                           class="inline-flex items-center justify-center gap-2 px-4 py-4 rounded-xl text-base font-bold text-white bg-gradient-to-r from-purple-600 via-pink-600 to-rose-500 hover:from-purple-500 hover:via-pink-500 hover:to-rose-400 transition shadow-lg active:scale-95">
+                            <i class="fa-solid fa-globe"></i>Suno
+                        </a>
+                        <a href="https://www.udio.com/create" target="_blank" rel="noopener"
+                           class="inline-flex items-center justify-center gap-2 px-4 py-4 rounded-xl text-base font-bold text-white bg-gradient-to-r from-blue-600 via-cyan-600 to-teal-600 hover:from-blue-500 hover:via-cyan-500 hover:to-teal-500 transition shadow-lg active:scale-95">
+                            <i class="fa-solid fa-globe"></i>Udio
+                        </a>
+                    </div>
+                    <p class="font-bold text-purple-300 text-sm mt-3 mb-1.5">
+                        Créer sur les plateformes
+                    </p>
+                    <p class="text-xs text-slate-300 leading-relaxed flex-1">
+                        Liens directs vers les plateformes officielles du même nom.
+                        Créez ou téléchargez vos chansons sur leur site, puis revenez
+                        publier le résultat ici via « Upload &amp; Publier ».
+                    </p>
+                </div>
+
+                <!-- 4. Facebook + Instagram (communauté) -->
+                <div class="rounded-xl border border-fuchsia-500/40 bg-fuchsia-500/5 p-4 flex flex-col">
+                    <div class="grid grid-cols-2 gap-2">
+                        <a href="https://www.facebook.com/profile.php?id=61593299775056&locale=fr_FR" target="_blank" rel="noopener"
+                           class="inline-flex items-center justify-center gap-2 px-4 py-4 rounded-xl text-base font-bold text-white bg-gradient-to-r from-blue-700 to-blue-500 hover:from-blue-600 hover:to-blue-400 transition shadow-lg active:scale-95">
+                            <i class="fa-brands fa-facebook-f"></i>Facebook
+                        </a>
+                        <a href="https://www.instagram.com/music.hit.maker/" target="_blank" rel="noopener"
+                           class="inline-flex items-center justify-center gap-2 px-4 py-4 rounded-xl text-base font-bold text-white bg-gradient-to-r from-pink-600 via-rose-500 to-orange-400 hover:from-pink-500 hover:via-rose-400 hover:to-orange-300 transition shadow-lg active:scale-95">
+                            <i class="fa-brands fa-instagram"></i>Instagram
+                        </a>
+                    </div>
+                    <p class="font-bold text-fuchsia-300 text-sm mt-3 mb-1.5">
+                        Rejoignez-nous !
+                    </p>
+                    <p class="text-xs text-slate-300 leading-relaxed flex-1">
+                        Publiez ou écoutez les hits de la communauté sur nos pages.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Loader de génération Suno (étapes + barre de progression) -->
+            <div id="music-status" class="hidden mt-6">
+                <div class="max-w-md mx-auto rounded-2xl bg-[#221d42] border border-fuchsia-700/50 p-5 shadow-xl">
+                    <div class="flex items-center gap-3 mb-4">
+                        <i class="fa-solid fa-compact-disc fa-spin text-2xl text-fuchsia-400"></i>
+                        <div class="flex-1">
+                            <p id="music-status-text" class="text-sm font-semibold text-gray-100">Préparation…</p>
+                            <div class="w-full h-1.5 bg-purple-950 rounded-full mt-2 overflow-hidden">
+                                <div id="music-progress-bar" class="h-full w-0 bg-gradient-to-r from-fuchsia-500 to-cyan-400 rounded-full transition-all duration-700"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <ul id="music-steps" class="space-y-1.5 text-xs text-left"></ul>
+                </div>
+            </div>
+
+            <!-- Résultat : pistes audio générées -->
+            <div id="music-result" class="mt-6 space-y-3 text-left"></div>
+        </div>
+    </main>
+
+    <!-- ==================== MODALE UPLOAD & PUBLIER ==================== -->
+    <div id="modal-publish" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+        <div class="w-full max-w-lg max-h-[92vh] overflow-y-auto rounded-2xl bg-[#1c1836] border border-orange-700/60 shadow-2xl p-6 animate-fadeIn">
+            <div class="flex items-start justify-between mb-5">
+                <h3 class="text-lg font-bold"><i class="fa-solid fa-upload text-orange-400 mr-2"></i>Publier une chanson</h3>
+                <button id="btn-publish-close" class="text-gray-400 hover:text-white transition"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+
+            <!-- Sélecteur de source -->
+            <p class="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-2">Source audio</p>
+            <div class="grid grid-cols-2 gap-2 mb-4">
+                <button id="publish-mode-link" type="button"
+                    class="px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400">
+                    <i class="fa-solid fa-link mr-1"></i>Lien Suno / Udio
+                </button>
+                <button id="publish-mode-file" type="button"
+                    class="px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400">
+                    <i class="fa-solid fa-file-audio mr-1"></i>Fichier MP3
+                </button>
+            </div>
+
+            <!-- Section : cover prompt -->
+            <div class="mt-4">
+                <div class="flex items-center justify-between mb-1">
+                    <label for="publish-cover-prompt" class="text-sm font-medium text-slate-300">Cover Prompt</label>
+                    <button id="btn-publish-cover-paste" type="button"
+                        class="text-xs font-semibold text-orange-400 hover:text-orange-300 transition active:scale-95 disabled:opacity-50">
+                        <i class="fa-solid fa-clipboard mr-1"></i>Coller
+                    </button>
+                </div>
+                <textarea id="publish-cover-prompt" rows="3"
+                    placeholder="Ex : album cover, dark synthwave, neon cityscape, dramatic lighting…"
+                    class="w-full rounded-lg bg-night border border-purple-800/70 p-3 text-sm outline-none transition-colors duration-200 placeholder:text-slate-500 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/30 resize-y"></textarea>
+                <p class="text-xs text-slate-500 mt-1.5"><i class="fa-solid fa-circle-info mr-1"></i>Prérempli par l'IA et modifiable librement. Utilisé pour générer la pochette.</p>
+            </div>
+
+            <!-- Section : lien Suno / Udio -->
+            <div id="publish-link-section">
+                <label for="publish-link-input" class="block text-sm font-medium text-slate-300 mb-1">URL de la chanson Suno ou Udio</label>
+                <input id="publish-link-input" type="url" spellcheck="false"
+                    placeholder="https://suno.com/song/… ou https://www.udio.com/songs/…"
+                    class="w-full rounded-lg bg-night border border-purple-800/70 p-3 text-sm outline-none transition-colors duration-200 placeholder:text-slate-500 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/30">
+                <p class="text-xs text-slate-500 mt-1.5"><i class="fa-solid fa-circle-info mr-1"></i>Le lien sera inclus dans la légende du post (« Écoutez la chanson complète »).</p>
+            </div>
+
+            <!-- Section : fichier MP3 -->
+            <div id="publish-file-section" class="hidden">
+                <label for="publish-file-input"
+                    class="flex flex-col items-center justify-center gap-2 w-full rounded-xl border-2 border-dashed border-purple-700/70 hover:border-orange-500/80 bg-night/60 hover:bg-orange-500/5 cursor-pointer transition-colors duration-200 px-4 py-8 text-center">
+                    <i class="fa-solid fa-cloud-arrow-up text-3xl text-orange-400"></i>
+                    <span class="text-sm font-semibold text-slate-200">Cliquez pour choisir un fichier MP3</span>
+                    <span class="text-xs text-slate-500">ou glissez-déposez · jusqu'à 100 Mo via le stockage cloud <span class="opacity-70">(sinon compression automatique intégrée, 4 Mo max)</span></span>
+                    <span id="publish-file-name" class="hidden mt-1 max-w-full truncate text-xs font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-600/40 rounded-md px-2 py-1"></span>
+                </label>
+                <input id="publish-file-input" type="file" accept=".mp3,audio/mpeg,audio/*" class="hidden">
+            </div>
+
+            <!-- Section : texte du post (prérempli par l'IA, modifiable) -->
+            <div class="mt-4">
+                <div class="flex items-center justify-between mb-1">
+                    <label for="publish-caption" class="text-sm font-medium text-slate-300">Texte du post</label>
+                    <button id="btn-caption-regen" type="button"
+                        class="text-xs font-semibold text-orange-400 hover:text-orange-300 transition active:scale-95 disabled:opacity-50">
+                        <i class="fa-solid fa-wand-magic-sparkles mr-1"></i>Régénérer par l'IA
+                    </button>
+                </div>
+                <textarea id="publish-caption" rows="5"
+                    placeholder="Le texte du post sera généré par l'IA…"
+                    class="w-full rounded-lg bg-night border border-purple-800/70 p-3 text-sm outline-none transition-colors duration-200 placeholder:text-slate-500 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/30 resize-y"></textarea>
+                <p class="text-xs text-slate-500 mt-1.5"><i class="fa-solid fa-circle-info mr-1"></i>Prérempli par l'IA et modifiable librement. Le lien d'écoute est ajouté automatiquement.</p>
+            </div>
+
+            <!-- Barre de progression de la publication (étape par étape) -->
+            <div id="publish-progress" class="hidden mt-4">
+                <div class="flex items-center justify-between mb-1.5">
+                    <span id="publish-progress-step" class="text-sm font-medium text-slate-200">Préparation…</span>
+                    <span id="publish-progress-pct" class="text-xs font-mono font-bold text-orange-400">0 %</span>
+                </div>
+                <div class="h-2.5 w-full rounded-full bg-purple-950/80 border border-purple-800/50 overflow-hidden">
+                    <div id="publish-progress-bar"
+                         class="h-full w-0 rounded-full bg-gradient-to-r from-purple-500 via-fuchsia-500 to-orange-400 transition-all duration-700 ease-out"></div>
+                </div>
+                <p id="publish-progress-detail" class="mt-1.5 text-xs text-slate-500 min-h-[1rem]"></p>
+            </div>
+
+            <!-- Zone de statut / résultat -->
+            <div id="publish-status" class="hidden mt-4 rounded-xl border p-4 text-sm"></div>
+
+            <!-- Pied de modale : bouton Publier -->
+            <div class="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-purple-900/60">
+                <button id="btn-publish-cancel" class="px-4 py-2.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 text-sm font-semibold transition active:scale-95">
+                    Annuler
+                </button>
+                <button id="btn-publish-confirm"
+                    class="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-white bg-gradient-to-r from-amber-600 via-orange-600 to-red-600 hover:from-amber-500 hover:via-orange-500 hover:to-red-500 transition shadow-lg shadow-orange-600/25 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:from-amber-600 disabled:hover:via-orange-600 disabled:hover:to-red-600">
+                    <i class="fa-solid fa-paper-plane mr-1"></i>Publier
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast notifications -->
+    <div id="toast-container" class="fixed bottom-5 right-5 z-[60] space-y-2"></div>
+
+    <footer class="text-center text-xs text-slate-500 py-8">
+        <div class="flex justify-center gap-5 mb-3">
+            <a href="https://www.facebook.com/profile.php?id=61593299775056&locale=fr_FR" target="_blank" rel="noopener"
+               class="flex items-center justify-center w-10 h-10 rounded-xl bg-panel border border-purple-700/50 text-slate-300 hover:text-fuchsia-400 hover:border-fuchsia-500/50 transition-all duration-200">
+                <i class="fa-brands fa-facebook-f text-lg"></i>
+            </a>
+            <a href="https://www.instagram.com/music.hit.maker/" target="_blank" rel="noopener"
+               class="flex items-center justify-center w-10 h-10 rounded-xl bg-panel border border-purple-700/50 text-slate-300 hover:text-fuchsia-400 hover:border-fuchsia-500/50 transition-all duration-200">
+                <i class="fa-brands fa-instagram text-lg"></i>
+            </a>
+        </div>
+        Music Hit Maker Studio — Propulsé par Groq · Optimisé pour Suno & Udio
+    </footer>
+
+    <!-- Background Publication Toast (bottom-right, non-blocking) -->
+    <div id="publish-toast-container" class="fixed bottom-5 right-5 z-[70] space-y-2 w-80 max-w-xs">
+        <div id="publish-toast" class="hidden">
+            <div class="bg-[#221d42]/95 backdrop-blur-sm border border-fuchsia-500/50 rounded-xl p-4 shadow-xl text-sm">
+                <div class="flex items-start gap-3">
+                    <div class="flex-shrink-0">
+                        <i class="fa-solid fa-spinner fa-spin text-xl text-fuchsia-400"></i>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div id="publish-toast-title" class="font-bold text-slate-100 mb-1">Publication en cours…</div>
+                        <div id="publish-toast-message" class="text-slate-400">Préparation…</div>
+                        <div class="mt-2">
+                            <div class="h-1.5 w-full bg-purple-950/60 rounded-full overflow-hidden">
+                                <div id="publish-toast-bar" class="h-full w-0 bg-gradient-to-r from-fuchsia-500 to-cyan-400 rounded-full transition-all duration-300"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================
+         MODALE : SAISIE DE CLÉ API POUR LES PROVIDERS IA
+         ============================================================ -->
+    <div id="modal-provider-key" class="fixed inset-0 z-[100] flex items-center justify-center hidden bg-black/50 backdrop-blur-sm p-4">
+        <div class="relative w-full max-w-md bg-panel border border-purple-800/50 rounded-2xl p-6 shadow-2xl">
+            <!-- Header -->
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-bold">
+                    <i class="fa-solid fa-key mr-2 text-fuchsia-400"></i>
+                    <span id="provider-key-provider-name">Provider Name</span>
+                </h2>
+                <button id="btn-close-provider-key" class="text-gray-400 hover:text-white text-xl">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            
+            <p class="text-sm text-slate-400 mb-4">
+                Entrez votre clé API pour <span id="provider-key-display-name"></span>. 
+                La clé sera stockée localement dans votre navigateur et utilisée pour 
+                les requêtes directes vers l'API (au lieu de passer par le serveur).
+            </p>
+            
+            <!-- Input de clé API -->
+            <div class="mb-5">
+                <label for="provider-key-input" class="block text-sm font-medium text-slate-300 mb-2">
+                    Clé API
+                </label>
+                <div class="relative">
+                    <input type="password" id="provider-key-input"
+                        class="w-full rounded-lg bg-night border border-purple-800/70 p-3 text-sm outline-none transition-colors duration-200 placeholder:text-slate-500 focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/30 font-mono"
+                        placeholder="Entrez votre clé API ici...">
+                    <button type="button" id="provider-key-show" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white">
+                        <i class="fa-solid fa-eye"></i>
+                    </button>
+                </div>
+                <p class="mt-2 text-xs text-slate-500">
+                    Cette clé ne quittera jamais votre appareil. Elle sera utilisée uniquement 
+                    pour améliorer vos quotas si vous en avez besoin.
+                </p>
+            </div>
+            
+            <!-- Boutons -->
+            <div class="flex items-center justify-end gap-3 mt-6">
+                <button id="btn-provider-key-cancel"
+                        class="px-4 py-2.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 text-sm font-semibold transition active:scale-95">
+                    Annuler
+                </button>
+                <button id="btn-provider-key-save"
+                        class="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-white bg-gradient-to-r from-fuchsia-600 via-pink-600 to-rose-500 hover:from-fuchsia-500 hover:via-pink-500 hover:to-rose-400 transition shadow-lg shadow-fuchsia-600/25 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
+                    <i class="fa-solid fa-save mr-1"></i>
+                    Sauvegarder
+                </button>
+            </div>
+            
+            <!-- Message d'erreur/succès -->
+            <p id="provider-key-message" class="mt-4 text-xs text-center min-h-[1.5rem]"></p>
+        </div>
+    </div>
+
+    <script src="artistes_presets.js"></script>
+    <script src="studio-pro.js"></script>
+</body>
+</html>
