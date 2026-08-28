@@ -1985,133 +1985,166 @@ function init() {
     const btnReset = $("btn-reset-studio");
     if (btnReset) {
         btnReset.addEventListener("click", () => {
-            state = {
-                config: "solo",
-                style: "",
-                artist: "",
-                instrumentalOnly: false,
-                drumStyle: "",
-                drumKit: "",
-                drumBpm: 120,
-                drumGroove: "straight",
-                drumFills: false,
-                harmonyKey: "",
-                harmonyMode: "major",
-                harmonyProgression: "auto",
-                harmonyVoicing: "auto",
-                bassStyle: "",
-                bassRole: "groove",
-                bassCharacter: "warm",
-                guitarType: "",
-                guitarRole: "rhythm",
-                keysType: "",
-                vocalStyle: "",
-                vocalRange: "auto",
-                singerStyle1: "",
-                singerStyle2: "",
-                singerArtist1: "",
-                singerArtist2: "",
-                lyricsLanguage: "fr",
-                lyricsStructure: "auto",
-                lyricsTheme: "",
-                lyricsText: "",
-                lyricsBlocks: [],
-                productionAtmosphere: "",
-                productionReference: "",
-                productionEffects: ["reverb"],
-                mixMode: false,
-                mixStyles: [],
-                mixArtists: [],
-                finalPrompt: "",
-                instrumentCards: []
-            };
+            console.log("[StudioPro][Reset] Nettoyage du studio…");
+            try {
+                state = {
+                    config: "solo",
+                    style: "",
+                    artist: "",
+                    instrumentalOnly: false,
+                    drumStyle: "",
+                    drumKit: "",
+                    drumBpm: 120,
+                    drumGroove: "straight",
+                    drumFills: false,
+                    harmonyKey: "",
+                    harmonyMode: "major",
+                    harmonyProgression: "auto",
+                    harmonyVoicing: "auto",
+                    bassStyle: "",
+                    bassRole: "groove",
+                    bassCharacter: "warm",
+                    guitarType: "",
+                    guitarRole: "rhythm",
+                    keysType: "",
+                    vocalStyle: "",
+                    vocalRange: "auto",
+                    singerStyle1: "",
+                    singerStyle2: "",
+                    singerArtist1: "",
+                    singerArtist2: "",
+                    lyricsLanguage: "fr",
+                    lyricsStructure: "auto",
+                    lyricsTheme: "",
+                    lyricsText: "",
+                    lyricsBlocks: [],
+                    productionAtmosphere: "",
+                    productionReference: "",
+                    productionEffects: ["reverb"],
+                    mixMode: false,
+                    mixStyles: [],
+                    mixArtists: [],
+                    finalPrompt: "",
+                    instrumentCards: []
+                };
 
-            setVal("artist-style", "");
-            setVal("artist-custom", "");
-            setVal("style-select", "");
-            setVal("artist-preset-select", "");
-            setVal("instrumental-only", false);
-            setVal("drum-style", "");
-            setVal("drum-kit", "");
-            setVal("drum-bpm", 120);
-            setVal("drum-bpm-value", 120);
-            setVal("drum-groove", "straight");
-            setVal("drum-fills", false);
-            setVal("harmony-key", "");
-            setVal("harmony-mode", "major");
-            setVal("harmony-progression", "auto");
-            setVal("harmony-voicing", "auto");
-            setVal("bass-style", "");
-            setVal("bass-role", "groove");
-            setVal("bass-character", "warm");
-            setVal("guitar-type", "");
-            setVal("guitar-role", "rhythm");
-            setVal("keys-type", "");
-            setVal("vocal-style", "");
-            setVal("vocal-range", "auto");
-            setVal("singer-style-1", "");
-            setVal("singer-style-2", "");
-            setVal("singer-artist-1", "");
-            setVal("singer-artist-2", "");
-            setVal("lyrics-language", "fr");
-            setVal("lyrics-structure", "auto");
-            setVal("lyrics-theme", "");
-            setVal("lyrics-text", "");
-            setVal("production-atmosphere", "");
-            setVal("production-reference", "");
-            const effContainer = $("production-effects");
-            if (effContainer) {
-                effContainer.querySelectorAll("input[type='checkbox']").forEach(cb => {
-                    cb.checked = cb.value === "reverb";
-                });
+                const resetSelect = (id, val) => {
+                    const el = $(id);
+                    if (!el) return;
+                    if (el.tagName === "SELECT") {
+                        el.value = val;
+                    } else {
+                        el.value = val;
+                    }
+                };
+
+                const resetCheckbox = (id, checked) => {
+                    const el = $(id);
+                    if (el) el.checked = checked;
+                };
+
+                resetSelect("artist-style", "");
+                resetSelect("style-select", "");
+                resetSelect("artist-preset-select", "");
+                resetCheckbox("instrumental-only", false);
+                resetSelect("drum-style", "");
+                resetSelect("drum-kit", "");
+                resetSelect("drum-bpm", 120);
+                resetSelect("drum-bpm-value", 120);
+                resetSelect("drum-groove", "straight");
+                resetCheckbox("drum-fills", false);
+                resetSelect("harmony-key", "");
+                resetSelect("harmony-mode", "major");
+                resetSelect("harmony-progression", "auto");
+                resetSelect("harmony-voicing", "auto");
+                resetSelect("bass-style", "");
+                resetSelect("bass-role", "groove");
+                resetSelect("bass-character", "warm");
+                resetSelect("guitar-type", "");
+                resetSelect("guitar-role", "rhythm");
+                resetSelect("keys-type", "");
+                resetSelect("vocal-style", "");
+                resetSelect("vocal-range", "auto");
+                resetSelect("singer-style-1", "");
+                resetSelect("singer-style-2", "");
+                resetSelect("singer-artist-1", "");
+                resetSelect("singer-artist-2", "");
+                resetSelect("lyrics-language", "fr");
+                resetSelect("lyrics-structure", "auto");
+                resetSelect("lyrics-theme", "");
+                resetSelect("lyrics-text", "");
+                resetSelect("production-atmosphere", "");
+                resetSelect("production-reference", "");
+                resetSelect("final-prompt", "");
+                resetSelect("lyrics-preview", "— L'aperçu de vos paroles apparaîtra ici —");
+
+                const effContainer = $("production-effects");
+                if (effContainer) {
+                    effContainer.querySelectorAll("input[type='checkbox']").forEach(cb => {
+                        cb.checked = cb.value === "reverb";
+                    });
+                }
+
+                resetCheckbox("drum-fills", false);
+                resetCheckbox("mix-mode-toggle", false);
+                resetCheckbox("instrumental-only", false);
+                resetSelect("mix-style-2", "");
+                resetSelect("mix-style-3", "");
+                resetSelect("mix-artist-2", "");
+                resetSelect("mix-artist-3", "");
+
+                const promptStatusEl = $("prompt-status");
+                if (promptStatusEl) promptStatusEl.textContent = "";
+
+                const lyricsGenStatus = $("lyrics-gen-status");
+                if (lyricsGenStatus) {
+                    lyricsGenStatus.classList.add("hidden");
+                    lyricsGenStatus.innerHTML = "";
+                }
+
+                const artistDisplay = $("artist-display");
+                if (artistDisplay) artistDisplay.textContent = "";
+
+                const mixModeToggle = $("mix-mode-toggle");
+                if (mixModeToggle) {
+                    mixModeToggle.checked = false;
+                    const mixGroup = $("mix-style-group");
+                    const mixArtistGroup = $("mix-artist-group");
+                    if (mixGroup) mixGroup.classList.add("hidden");
+                    if (mixArtistGroup) mixArtistGroup.classList.add("hidden");
+                }
+
+                const instrumentalOnly = $("instrumental-only");
+                if (instrumentalOnly) {
+                    instrumentalOnly.checked = false;
+                    const vocalControls = $("vocal-controls");
+                    const lyricsSection = $("lyrics-section");
+                    if (vocalControls) vocalControls.classList.remove("hidden");
+                    if (lyricsSection) lyricsSection.classList.remove("hidden");
+                }
+
+                const configPanelModele = $("config-panel-modele");
+                const configPanelDetaillee = $("config-panel-detaillee");
+                if (configPanelModele) configPanelModele.classList.remove("hidden");
+                if (configPanelDetaillee) configPanelDetaillee.classList.add("hidden");
+
+                document.querySelectorAll(".config-card").forEach(card => card.classList.remove("active"));
+                const artistPresetSelect = $("artist-preset-select");
+                if (artistPresetSelect) artistPresetSelect.value = "";
+
+                state.lyricsBlocks = [];
+                state.instrumentCards = [];
+                renderLyricsBlocks();
+                resetInstrumentCards();
+                updateLyricsPreview();
+                saveState();
+
+                console.log("[StudioPro][Reset] Studio nettoyé avec succès.");
+                toast("Studio réinitialisé avec succès !", "success");
+            } catch (err) {
+                console.error("[StudioPro][Reset] Erreur:", err);
+                toast("Erreur lors du nettoyage : " + err.message, "error");
             }
-
-            setChecked("drum-fills", false);
-            setChecked("mix-mode-toggle", false);
-            setChecked("instrumental-only", false);
-            setVal("mix-style-2", "");
-            setVal("mix-style-3", "");
-            setVal("mix-artist-2", "");
-            setVal("mix-artist-3", "");
-            setVal("final-prompt", "");
-            const promptStatusEl = $("prompt-status");
-            if (promptStatusEl) promptStatusEl.textContent = "";
-            setVal("lyrics-preview", "— L'aperçu de vos paroles apparaîtra ici —");
-
-            const mixModeToggle = $("mix-mode-toggle");
-            if (mixModeToggle) {
-                mixModeToggle.checked = false;
-                const mixGroup = $("mix-style-group");
-                const mixArtistGroup = $("mix-artist-group");
-                if (mixGroup) mixGroup.classList.add("hidden");
-                if (mixArtistGroup) mixArtistGroup.classList.add("hidden");
-            }
-
-            const instrumentalOnly = $("instrumental-only");
-            if (instrumentalOnly) {
-                instrumentalOnly.checked = false;
-                const vocalControls = $("vocal-controls");
-                const lyricsSection = $("lyrics-section");
-                if (vocalControls) vocalControls.classList.remove("hidden");
-                if (lyricsSection) lyricsSection.classList.remove("hidden");
-            }
-
-            const configPanelModele = $("config-panel-modele");
-            const configPanelDetaillee = $("config-panel-detaillee");
-            if (configPanelModele) configPanelModele.classList.remove("hidden");
-            if (configPanelDetaillee) configPanelDetaillee.classList.add("hidden");
-
-            document.querySelectorAll(".config-card").forEach(card => card.classList.remove("active"));
-            const artistPresetSelect = $("artist-preset-select");
-            if (artistPresetSelect) artistPresetSelect.value = "";
-
-            state.lyricsBlocks = [];
-            state.instrumentCards = [];
-            renderLyricsBlocks();
-            resetInstrumentCards();
-            updateLyricsPreview();
-            saveState();
-            toast("Studio réinitialisé avec succès !", "success");
         });
     }
 
