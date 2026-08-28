@@ -558,6 +558,28 @@ function closeApiKeyModal() {
 // ============================================================
 
 /**
+ * Collecte les données du Mode Mix (styles + artistes additionnels).
+ * Renvoie null si le mode mix est désactivé ou incomplet (< 2 entrées).
+ * Définie au niveau global car appelée depuis generateWithGroq().
+ */
+function getMixData() {
+    const mixModeToggle = $("mix-mode-toggle");
+    if (!mixModeToggle || !mixModeToggle.checked) return null;
+    const mixStyles = [
+        $("style-select") && $("style-select").value || "",
+        $("mix-style-2") && $("mix-style-2").value || "",
+        $("mix-style-3") && $("mix-style-3").value || ""
+    ].filter(Boolean);
+    const mixArtists = [
+        $("artist-style") && $("artist-style").value || "",
+        $("mix-artist-2") && $("mix-artist-2").value || "",
+        $("mix-artist-3") && $("mix-artist-3").value || ""
+    ].filter(Boolean);
+    if (mixStyles.length < 2 && mixArtists.length < 2) return null;
+    return { mixStyles, mixArtists };
+}
+
+/**
  * Génère la chanson via Groq.
  * @param {boolean} isAutoMode - Mode Création Auto : thème profond inventé par l'IA
  * et artiste choisi aléatoirement dans la BDD studio.
@@ -2384,21 +2406,9 @@ function init() {
         mixModeToggle.addEventListener("change", updateMixModeUI);
     }
 
-    function getMixData() {
-        if (!mixModeToggle || !mixModeToggle.checked) return null;
-        const mixStyles = [
-            $("style-select") && $("style-select").value || "",
-            $("mix-style-2") && $("mix-style-2").value || "",
-            $("mix-style-3") && $("mix-style-3").value || ""
-        ].filter(Boolean);
-        const mixArtists = [
-            $("artist-style") && $("artist-style").value || "",
-            $("mix-artist-2") && $("mix-artist-2").value || "",
-            $("mix-artist-3") && $("mix-artist-3").value || ""
-        ].filter(Boolean);
-        if (mixStyles.length < 2 && mixArtists.length < 2) return null;
-        return { mixStyles, mixArtists };
-    }
+        // getMixData() est définie au niveau global (voir plus haut) car elle est
+    // appelée depuis generateWithGroq(), une fonction globale. La version
+    // imbriquée ici a été supprimée pour éviter une ReferenceError au clic.
 
     // --- Bouton refresh titre ---
     $("btn-refresh-title").addEventListener("click", () => {

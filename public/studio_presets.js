@@ -373,32 +373,12 @@ function pickCamelotKey(a, b, ratio) {
     return keys[Math.round((1 - ratio) * keys.length)];
 }
 
-function applyPresetToState(state, preset) {
-    if (!preset) return;
-    state.config = preset.config;
-    state.style = preset.style;
-    state.artist = preset.artist;
-    if (preset.drums) { state.drumStyle = preset.drums.style; state.drumBpm = preset.drums.bpm; state.drumKit = preset.drums.kit || ""; state.drumGroove = preset.drums.groove || "straight"; state.drumFills = !!preset.drums.fills; }
-    if (preset.harmony) { state.harmonyKey = preset.harmony.key; state.harmonyMode = preset.harmony.mode; state.harmonyProgression = preset.harmony.progression; state.harmonyVoicing = preset.harmony.voicing; }
-    if (preset.bass) { state.bassStyle = preset.bass.style; state.bassRole = preset.bass.role; state.bassCharacter = preset.bass.character; }
-    if (preset.guitar) { state.guitarType = preset.guitar.type; state.guitarRole = preset.guitar.role; }
-    if (preset.keys) { state.keysType = preset.keys.type; }
-    if (preset.vocals) { state.vocalStyle = preset.vocals.style; state.vocalRange = preset.vocals.range; if (preset.vocals.singerStyle1) state.singerStyle1 = preset.vocals.singerStyle1; if (preset.vocals.singerArtist1) state.singerArtist1 = preset.vocals.singerArtist1; }
-    if (preset.lyrics) { state.lyricsLanguage = preset.lyrics.language; state.lyricsStructure = preset.lyrics.structure; state.lyricsTheme = preset.lyrics.theme; }
-    if (preset.production) { state.productionAtmosphere = preset.production.atmosphere; state.productionReference = preset.production.reference; state.productionEffects = preset.production.effects || []; }
-    if (preset.mixMode !== undefined) state.mixMode = preset.mixMode;
-    if (preset.extras && Array.isArray(preset.extras)) {
-        state.instrumentCards = preset.extras.map(extra => ({ ...extra }));
-    }
-}
-
 // ------------------------------------------------------------
 // 5. Export de tout
 // ------------------------------------------------------------
 
 window.STUDIO_PRESETS = STUDIO_PRESETS;
 window.ARTIST_PRESETS = ALL_PRESETS;
-window.applyPresetToState = applyPresetToState;
 window.resolveProfileType = resolveProfileType;
 window.buildArtistPreset = buildArtistPreset;
 window.pickCamelotKey = pickCamelotKey;

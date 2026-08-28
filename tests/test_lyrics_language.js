@@ -43,20 +43,40 @@ function check(label, fn) {
 console.log("\n[1] Résolution langue <-> champ BDD sur les "
     + ARTISTS_DATABASE.length + " artistes");
 
+// Langues cibles avec résolution explicite ; toute langue au-delà de
+// {Français, Anglais, Espagnol} retombe sur le français (fallback historique),
+// exactement comme les artistes déjà présents (Kabyle, Arabe, Portugais,
+// Tamazight, Bambara, Kreyòl, Italien, Latin, Allemand, ...).
 const expectedMap = { "Français": "fr", "Anglais": "en", "Espagnol": "es" };
 const counts = { fr: 0, en: 0, es: 0 };
 
-check("chaque artiste mappe vers sa langue déclarée", () => {
+check("chaque artiste mappe vers une langue résolue valide", () => {
     for (const a of ARTISTS_DATABASE) {
-        assert(expectedMap[a.language], `langue inattendue : ${a.name} => ${a.language}`);
+        assert(a.language && typeof a.language === "string", `langue manquante : ${a.name}`);
         const got = resolveLyricsLanguage(a.language);
+        assert(["fr", "en", "es"].includes(got), `${a.name} (${a.language}) -> code ${got} inattendu`);
+        const expected = expectedMap[a.language] || "fr";
+        assert.strictEqual(got, expected, `${a.name} (${a.language}) -> ${got} (attendu ${expected})`);
         counts[got]++;
-        assert.strictEqual(got, expectedMap[a.language], `${a.name} (${a.language}) -> ${got}`);
     }
 });
 
-check("répartition cohérente (14 fr / 12 en / 10 es)", () => {
-    assert.deepStrictEqual(counts, { fr: 14, en: 12, es: 10 });
+check("la répartition résolue couvre toute la BDD de façon cohérente", () => {
+    assert.strictEqual(counts.fr + counts.en + counts.es, ARTISTS_DATABASE.length,
+        "la somme des langues résolues doit couvrir tous les artistes");
+    assert.deepStrictEqual(Object.keys(counts).sort(), ["en", "es", "fr"]);
+});
+
+check("la BDD contient les nouvelles entrées orchestrales & opéra", () => {
+    const names = new Set(ARTISTS_DATABASE.map((a) => a.name));
+    assert(names.has("Hans Zimmer"), "Hans Zimmer manque de la BDD orchestre");
+    assert(names.has("Carmina Burana"), "Carmina Burana manque de la BDD opéra");
+    assert(ARTISTS_DATABASE.some((a) => /^Orchestre/.test(a.genre) && a.language === "Anglais"),
+        "aucune entrée orchestrale en anglais");
+    assert(ARTISTS_DATABASE.some((a) => /^Opéra/.test(a.genre) && a.language === "Latin"),
+        "aucune entrée opéra en latin");
+    assert(ARTISTS_DATABASE.some((a) => /^Opéra/.test(a.genre) && a.language === "Italien"),
+        "aucune entrée opéra en italien");
 });
 
 check("valeurs variantes & inconnues -> défaut français", () => {

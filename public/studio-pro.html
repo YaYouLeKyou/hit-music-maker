@@ -124,12 +124,37 @@
     </section>
 
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+        <!-- Workflow Steps Indicator -->
+        <div class="bg-[#1a1a2e] rounded-xl border border-purple-800/50 p-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <div class="flex items-center justify-center w-8 h-8 rounded-full bg-fuchsia-600 text-white text-sm font-bold">1</div>
+                    <span class="text-sm font-semibold text-gray-200">Configuration</span>
+                </div>
+                <div class="flex-1 h-0.5 bg-purple-800/50 mx-2"></div>
+                <div class="flex items-center gap-2">
+                    <div class="flex items-center justify-center w-8 h-8 rounded-full bg-purple-800/50 text-gray-400 text-sm font-bold">2</div>
+                    <span class="text-sm font-medium text-gray-400">Instruments</span>
+                </div>
+                <div class="flex-1 h-0.5 bg-purple-800/50 mx-2"></div>
+                <div class="flex items-center gap-2">
+                    <div class="flex items-center justify-center w-8 h-8 rounded-full bg-purple-800/50 text-gray-400 text-sm font-bold">3</div>
+                    <span class="text-sm font-medium text-gray-400">Paroles & Vocal</span>
+                </div>
+                <div class="flex-1 h-0.5 bg-purple-800/50 mx-2"></div>
+                <div class="flex items-center gap-2">
+                    <div class="flex items-center justify-center w-8 h-8 rounded-full bg-purple-800/50 text-gray-400 text-sm font-bold">4</div>
+                    <span class="text-sm font-medium text-gray-400">Prompt Final</span>
+                </div>
+            </div>
+        </div>
+
         <!-- Configuration musicale -->
         <section class="bg-[#1a1a2e] rounded-xl border border-purple-800/50 p-6">
-            <h2 class="text-lg font-bold mb-4 text-gray-200">
-                <i class="fa-solid fa-layer-group text-fuchsia-400 mr-2"></i>Configuration musicale
+            <h2 class="text-lg font-bold mb-1 text-gray-200">
+                <i class="fa-solid fa-layer-group text-fuchsia-400 mr-2"></i>1. Choisis ta configuration
             </h2>
-            <p class="text-xs text-gray-400 mb-4">Sélectionnez d'abord une configuration d'ensemble, puis un style/genre présent dans la base.</p>
+            <p class="text-xs text-gray-400 mb-4">Sélectionne d'abord une configuration d'ensemble, puis un style/genre présent dans la base.</p>
             <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 mb-4">
                 <button data-config="solo" class="config-card active bg-[#1a1a2e] border-2 border-purple-800/50 rounded-xl p-4 text-center cursor-pointer hover:border-fuchsia-500/50">
                     <i class="fa-solid fa-guitar text-2xl mb-2 text-fuchsia-400"></i>
@@ -434,13 +459,13 @@
             <div class="bg-[#1a1a2e] rounded-xl border border-purple-800/50 p-6">
                 <div class="flex items-center justify-between mb-4">
                     <h3 class="text-md font-bold text-gray-200">
-                        <i class="fa-solid fa-guitar text-fuchsia-400 mr-2"></i>Instruments supplémentaires
+                        <i class="fa-solid fa-guitar text-fuchsia-400 mr-2"></i>2. Instruments supplémentaires
                     </h3>
                     <button id="btn-add-instrument" type="button" class="px-3 py-1.5 rounded-lg bg-fuchsia-600 hover:bg-fuchsia-500 text-white text-xs font-semibold transition">
                         <i class="fa-solid fa-plus mr-1"></i>Ajouter
                     </button>
                 </div>
-                <p class="text-xs text-gray-400 mb-3">Ajoutez ou supprimez des cartes instrumentales selon la configuration.</p>
+                <p class="text-xs text-gray-400 mb-3">Ces cartes sont automatiquement remplies quand tu choisis une configuration ou un modèle. Tu peux ensuite tout personnaliser.</p>
                 <div id="instrument-cards-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
             </div>
         </div>
@@ -448,7 +473,7 @@
         <!-- Vocals & Singer -->
             <div class="bg-[#1a1a2e] rounded-xl border border-purple-800/50 p-6">
                 <h3 class="text-md font-bold mb-4 text-gray-200">
-                    <i class="fa-solid fa-microphone text-red-400 mr-2"></i>Chant & Vocal
+                    <i class="fa-solid fa-microphone text-red-400 mr-2"></i>3. Chant & Vocal
                 </h3>
                 <div class="space-y-4">
                     <label class="flex items-center gap-2 cursor-pointer">
@@ -508,7 +533,7 @@
             <!-- Lyrics -->
             <div id="lyrics-section" class="bg-[#1a1a2e] rounded-xl border border-purple-800/50 p-6">
                 <h3 class="text-md font-bold mb-4 text-gray-200">
-                    <i class="fa-solid fa-pen-fancy text-amber-400 mr-2"></i>Paroles
+                    <i class="fa-solid fa-pen-fancy text-amber-400 mr-2"></i>Paroles & Structure
                 </h3>
                 <div class="space-y-4">
                     <div>
@@ -607,7 +632,7 @@
         <section class="bg-[#1a1a2e] rounded-xl border border-purple-800/50 p-6">
             <div class="flex items-center justify-between mb-4">
                 <h2 class="text-lg font-bold text-gray-200">
-                    <i class="fa-solid fa-wand-magic-sparkles text-fuchsia-400 mr-2"></i>Prompt Final Suno
+                    <i class="fa-solid fa-wand-magic-sparkles text-fuchsia-400 mr-2"></i>4. Prompt Final Suno
                 </h2>
                 <div class="flex gap-2">
                     <button id="btn-assemble" class="px-4 py-2 rounded-lg bg-fuchsia-600 hover:bg-fuchsia-500 text-white text-sm font-semibold transition">
