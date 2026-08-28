@@ -97,6 +97,8 @@ async function createCoverVideo({ imagePath, audioPath, outPath, duration, fullS
         "-loop", "1",                       // image bouclée
         "-i", imagePath,
         "-i", audioPath,
+        "-map", "0:v",                      // flux vidéo depuis l'image
+        "-map", "1:a",                      // flux audio depuis le fichier audio
         "-t", String(maxDuration),          // borne la durée
         "-vf", [
             "scale=1080:1920:force_original_aspect_ratio=decrease",

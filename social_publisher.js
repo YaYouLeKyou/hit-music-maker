@@ -470,7 +470,8 @@ async function createInstagramReelContainer(hit, videoUrl, localVideoPath, capti
             headers: {
                 "Authorization": `OAuth ${IG_ACCESS_TOKEN}`,
                 "offset": "0",
-                "file_size": String(total)
+                "file_size": String(total),
+                "Content-Type": "application/octet-stream"
             },
             body: videoBytes // bytes bruts du MP4 (avec la piste audio)
         });

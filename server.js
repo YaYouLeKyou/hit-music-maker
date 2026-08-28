@@ -1765,10 +1765,6 @@ app.post("/api/publish", upload.single('file'), async (req, res) => {
         if (process.env.BLOB_READ_WRITE_TOKEN) {
             const { put } = require("@vercel/blob");
             try {
-                if (videoPath && fs.existsSync(videoPath)) {
-                    const v = await put(`videos/${Date.now()}-${path.basename(videoPath)}`, fs.readFileSync(videoPath), { access: "public", addRandomSuffix: false });
-                    videoUrlFinal = v.url;
-                }
                 if (localAudioUrl && fs.existsSync(path.join(PUBLIC_UPLOADS_DIR, path.basename(localAudioUrl)))) {
                     const a = await put(`audio/${Date.now()}-${path.basename(localAudioUrl)}`, fs.readFileSync(path.join(PUBLIC_UPLOADS_DIR, path.basename(localAudioUrl))), { access: "public", addRandomSuffix: false });
                     audioUrlFinal = a.url;
@@ -1777,9 +1773,9 @@ app.post("/api/publish", upload.single('file'), async (req, res) => {
                     const c = await put(`covers/${Date.now()}-${path.basename(coverPath)}`, fs.readFileSync(coverPath), { access: "public", addRandomSuffix: false });
                     coverUrlFinal = c.url;
                 }
-                console.log(`[PUBLISH] Persistance Blob OK — vidéo : ${videoUrlFinal || "—"} | audio : ${audioUrlFinal || "—"} | pochette : ${coverUrlFinal || "—"}`);
+                console.log(`[PUBLISH] Persistance Blob (1/2) OK — audio : ${audioUrlFinal || "—"} | pochette : ${coverUrlFinal || "—"}`);
             } catch (blobErr) {
-                console.warn(`[PUBLISH] Persistance Blob impossible : ${blobErr.message}`);
+                console.warn(`[PUBLISH] Persistance Blob (1/2) impossible : ${blobErr.message}`);
             }
         }
 
@@ -1821,6 +1817,18 @@ app.post("/api/publish", upload.single('file'), async (req, res) => {
             } catch (vidErr) {
                 console.warn("⚠️ [PUBLISH] Génération vidéo impossible — repli photo : " + vidErr.message);
                 sendProgress(72, "Encodage vidéo indisponible — repli sur la pochette seule.", { step: "video", state: "warning" });
+            }
+        }
+
+        // Persistance Blob de la vidéo APRÈS génération (nécessite videoPath existant)
+        if (process.env.BLOB_READ_WRITE_TOKEN && videoPath && fs.existsSync(videoPath)) {
+            const { put } = require("@vercel/blob");
+            try {
+                const v = await put(`videos/${Date.now()}-${path.basename(videoPath)}`, fs.readFileSync(videoPath), { access: "public", addRandomSuffix: false });
+                videoUrlFinal = v.url;
+                console.log(`[PUBLISH] Persistance Blob (2/2) vidéo OK : ${videoUrlFinal}`);
+            } catch (blobErr) {
+                console.warn(`[PUBLISH] Persistance Blob (2/2) vidéo impossible : ${blobErr.message}`);
             }
         }
 

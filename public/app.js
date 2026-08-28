@@ -2204,12 +2204,17 @@ function init() {
     $("ai-providers-config").classList.remove("hidden");
     refreshProviderKeyUi();
     
-    // --- Bouton afficher la config depuis le sélecteur ---
+    // --- Bouton afficher/masquer la config depuis le sélecteur ---
     $("btn-show-provider-config").addEventListener("click", () => {
-        const selectedProvider = $("provider-select").value;
-        loadProviderConfigPanel(selectedProvider);
-        // Scroll to the config section
-        $("ai-providers-config").scrollIntoView({ behavior: "smooth", block: "start" });
+        const panel = $("ai-provider-config-panel");
+        const isHidden = panel.classList.contains("hidden");
+        if (isHidden) {
+            const selectedProvider = $("provider-select").value;
+            loadProviderConfigPanel(selectedProvider);
+            $("ai-providers-config").scrollIntoView({ behavior: "smooth", block: "start" });
+        } else {
+            panel.classList.add("hidden");
+        }
     });
 
     // Auto-save des clés saisies dans le panel de configuration
