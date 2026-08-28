@@ -174,17 +174,30 @@ function applyPresetToState(preset) {
         state.productionEffects = preset.production.effects || ["reverb", "delay"];
     }
     if (preset.mixMode !== undefined) state.mixMode = preset.mixMode;
+        // Cartes d'instruments : modèle de config + éventuels extras du preset,
+    // puis complète TOUTES les cartes (jamais vides) avec valeurs par défaut.
+    const cfg = preset.config || state.config;
+    const template = getConfigTemplate(cfg);
+    const templateMap = new Map(template.map(c => [c.id, { ...c }]));
+
     if (preset.extras && Array.isArray(preset.extras)) {
-        const template = getConfigTemplate(preset.config || state.config);
-        const templateMap = new Map(template.map(c => [c.id, c]));
         preset.extras.forEach(extra => {
-            templateMap.set(extra.id, { ...extra });
+            const base = INSTRUMENT_LIBRARY[extra.type] || INSTRUMENT_LIBRARY[extra.section] || INSTRUMENT_LIBRARY.custom;
+            templateMap.set(extra.id, {
+                id: extra.id,
+                label: extra.label || base.label,
+                section: extra.section || base.section,
+                type: extra.type || base.section || "custom",
+                icon: base.icon,
+                color: base.color,
+                style: extra.style || base.style,
+                role: extra.role || base.role,
+                character: extra.character || base.character
+            });
         });
-        state.instrumentCards = Array.from(templateMap.values());
-    } else {
-        const template = getConfigTemplate(preset.config || state.config);
-        state.instrumentCards = template.map(c => ({ ...c }));
     }
+
+    state.instrumentCards = Array.from(templateMap.values()).map(c => fillCardDefaults(c));
     saveState();
     syncUiFromState();
     const label = preset.label ? `Configuration appliquée : ${preset.label}` : "Configuration appliquée";
@@ -251,7 +264,7 @@ function applyMixProfiles(presetA, presetB, ratio = 0.5) {
     allExtras.forEach(extra => {
         templateMap.set(extra.id, { ...extra });
     });
-    state.instrumentCards = Array.from(templateMap.values());
+    state.instrumentCards = Array.from(templateMap.values()).map(c => fillCardDefaults(c));
 
     saveState();
     syncUiFromState();
@@ -266,7 +279,11 @@ function initPresetChipsAndSelect() {
         chip.addEventListener("click", () => {
             const presetId = chip.dataset.preset;
             const preset = window.ARTIST_PRESETS.find(p => p.id === presetId);
-            if (preset) applyPresetToState(preset);
+            if (preset) {
+                // Mémorise le modèle choisi : « Appliquer la config auto » le ré-appliquera
+                state.selectedPresetId = presetId;
+                applyPresetToState(preset);
+            }
         });
     });
 
@@ -275,9 +292,39 @@ function initPresetChipsAndSelect() {
             const presetId = artistSelect.value;
             if (!presetId) return;
             const preset = window.ARTIST_PRESETS.find(p => p.id === presetId);
-            if (preset) applyPresetToState(preset);
+            if (preset) {
+                // Mémorise le modèle choisi : « Appliquer la config auto » le ré-appliquera
+                state.selectedPresetId = presetId;
+                applyPresetToState(preset);
+            }
         });
     }
+}
+
+// Bascule entre l'onglet « Modèle (rapide) » et « Détaillée (manuel) »
+function initConfigTabs() {
+    const tabModele = $("tab-modele");
+    const tabDetaillee = $("tab-detaillee");
+    const panelModele = $("config-panel-modele");
+    const panelDetaillee = $("config-panel-detaillee");
+    if (!tabModele || !tabDetaillee || !panelModele || !panelDetaillee) return;
+
+    const activeClasses = ["bg-fuchsia-600", "text-white", "shadow-md", "shadow-fuchsia-600/25"];
+    const idleClasses = ["bg-[#0f0f1a]", "text-gray-400", "border", "border-purple-800/70", "hover:border-fuchsia-500/50"];
+
+    function activateTab(selected) {
+        const isModele = selected === "modele";
+        panelModele.classList.toggle("hidden", !isModele);
+        panelDetaillee.classList.toggle("hidden", isModele);
+        [tabModele, tabDetaillee].forEach(tab => {
+            const isActive = (tab === tabModele) === isModele;
+            tab.classList.remove(...activeClasses, ...idleClasses);
+            tab.classList.add(...(isActive ? activeClasses : idleClasses));
+        });
+    }
+
+    tabModele.addEventListener("click", () => activateTab("modele"));
+    tabDetaillee.addEventListener("click", () => activateTab("detaillee"));
 }
 
 async function loadStudioPresets() {
@@ -448,6 +495,16 @@ function handleAutoConfigure() {
     const mixStyles = state.mixStyles || [];
     const mixArtists = state.mixArtists || [];
 
+    // 1) Priorité : le modèle (preset) explicitement choisi dans l'onglet « Modèle »
+    if (state.selectedPresetId) {
+        const chosen = (window.ARTIST_PRESETS || []).find(p => p.id === state.selectedPresetId);
+        if (chosen) {
+            applyPresetToState(chosen);
+            toast(`Config auto appliquée : ${chosen.label}`, "success");
+            return;
+        }
+    }
+
     if (!style && !artist) {
         // Aucun style/artiste explicite : on génère tout de même une configuration
         // de base à partir de la config choisie et des réglages saisis manuellement.
@@ -603,49 +660,124 @@ function updateConfigCards() {
     });
 }
 
+// ------------------------------------------------------------
+// Bibliothèque d'instruments (types utilisables dans les cartes)
+// ------------------------------------------------------------
+const INSTRUMENT_LIBRARY = {
+    guitar:     { label: "Guitare", section: "guitar", icon: "fa-guitar", color: "text-purple-400", style: "Electric", role: "Rhythm", character: "Warm" },
+    keys:       { label: "Clavier / Piano", section: "keys", icon: "fa-piano-keyboard", color: "text-blue-400", style: "Grand Piano", role: "Chords", character: "Warm" },
+    bass:       { label: "Basse", section: "bass", icon: "fa-sliders-h", color: "text-green-400", style: "Pick bass", role: "Groove", character: "Warm" },
+    drums:      { label: "Percussions", section: "drums", icon: "fa-drum", color: "text-pink-400", style: "Acoustic kit", role: "Rythm", character: "Punchy" },
+    strings:    { label: "Cordes", section: "strings", icon: "fa-violin", color: "text-cyan-400", style: "Quartet", role: "Pad", character: "Warm" },
+    brass:      { label: "Cuivres", section: "brass", icon: "fa-trumpet", color: "text-amber-400", style: "Stabs", role: "Accent", character: "Bright" },
+    woodwinds:  { label: "Vent", section: "woodwinds", icon: "fa-wind", color: "text-teal-400", style: "Section", role: "Melody", character: "Bright" },
+    synth:      { label: "Synth", section: "synth", icon: "fa-wave-square", color: "text-lime-400", style: "Analog lead", role: "Lead", character: "Sharp" },
+    organ:      { label: "Orgue", section: "organ", icon: "fa-burst", color: "text-indigo-400", style: "Hammond", role: "Fill", character: "Warm" },
+    percussion: { label: "Perc. supplémentaire", section: "percussion", icon: "fa-cube", color: "text-yellow-400", style: "Shakers / congas", role: "Groove", character: "Organic" },
+    vocals:     { label: "Voix supplémentaire", section: "vocals", icon: "fa-microphone", color: "text-red-400", style: "Backing vocals", role: "Harmony", character: "Smooth" },
+    custom:     { label: "Instrument (libre)", section: "custom", icon: "fa-cube", color: "text-slate-400", style: "", role: "", character: "" }
+};
+
+// Ordre d'affichage du picker "Ajouter un instrument"
+const INSTRUMENT_TYPE_ORDER = ["guitar", "keys", "bass", "drums", "strings", "brass", "woodwinds", "synth", "organ", "percussion", "vocals", "custom"];
+
 const CONFIG_CARD_TEMPLATES = {
-    solo: [
-        { id: "extra-guitar-keys", label: "Guitare / Clavier supp.", section: "guitar-keys", style: "", role: "", character: "" }
+        solo: [
+        { id: "extra-guitar-keys", label: "Guitare / Clavier", type: "guitar", section: "guitar", style: "Electric", role: "Rhythm", character: "Warm" }
     ],
     duo: [
-        { id: "guitar-keys-1", label: "Guitare / Clavier 1", section: "guitar-keys", style: "", role: "", character: "" },
-        { id: "guitar-keys-2", label: "Guitare / Clavier 2", section: "guitar-keys", style: "", role: "", character: "" }
+        { id: "guitar-keys-1", label: "Guitare / Clavier 1", type: "guitar", section: "guitar", style: "Electric", role: "Rhythm", character: "Warm" },
+        { id: "guitar-keys-2", label: "Guitare / Clavier 2", type: "keys", section: "keys", style: "Synth pad", role: "Texture", character: "Dreamy" }
     ],
     band: [
-        { id: "guitar2", label: "Guitare 2", section: "guitar", style: "", role: "", character: "" },
-        { id: "strings", label: "Strings", section: "strings", style: "", role: "", character: "" }
+        { id: "guitar2", label: "Guitare 2", type: "guitar", section: "guitar", style: "Electric lead", role: "Solo", character: "Aggressive" },
+        { id: "strings", label: "Strings", type: "strings", section: "strings", style: "Quartet", role: "Pad", character: "Warm" }
     ],
-    orchestra: [
-        { id: "strings", label: "Strings", section: "strings", style: "", role: "", character: "" },
-        { id: "brass", label: "Brass", section: "brass", style: "", role: "", character: "" },
-        { id: "woodwinds", label: "Woodwinds", section: "woodwinds", style: "", role: "", character: "" }
+        orchestra: [
+        { id: "strings", label: "Strings", type: "strings", section: "strings", style: "Full orchestra", role: "Pad", character: "Warm" },
+        { id: "brass", label: "Brass", type: "brass", section: "brass", style: "Full brass section", role: "Accent", character: "Bright" },
+        { id: "woodwinds", label: "Woodwinds", type: "woodwinds", section: "woodwinds", style: "Section", role: "Melody", character: "Bright" },
+        { id: "harp", label: "Harpe", type: "keys", section: "keys", style: "Pedal harp", role: "Arp", character: "Ethereal" }
     ],
     opera: [
-        { id: "strings", label: "Strings", section: "strings", style: "", role: "", character: "" },
-        { id: "brass", label: "Brass", section: "brass", style: "", role: "", character: "" },
-        { id: "pipe-organ", label: "Pipe Organ", section: "organ", style: "", role: "", character: "" }
+        { id: "strings", label: "Strings", type: "strings", section: "strings", style: "Orchestra", role: "Pad", character: "Warm" },
+        { id: "brass", label: "Brass", type: "brass", section: "brass", style: "Stabs", role: "Accent", character: "Bright" },
+        { id: "pipe-organ", label: "Orgue à tuyaux", type: "organ", section: "organ", style: "Pipe organ", role: "Bass / Fill", character: "Majestic" }
     ],
     urban: [
-        { id: "synth1", label: "Synth 1", section: "synth", style: "", role: "", character: "" },
-        { id: "synth2", label: "Synth 2", section: "synth", style: "", role: "", character: "" }
+        { id: "synth1", label: "Synth 1", type: "synth", section: "synth", style: "808 sub-bass layer", role: "Bass", character: "Darker" },
+        { id: "synth2", label: "Synth 2", type: "synth", section: "synth", style: "Pad", role: "Texture", character: "Warm" }
     ],
     reggae: [
-        { id: "guitar", label: "Guitare", section: "guitar", style: "", role: "", character: "" },
-        { id: "brass-perc", label: "Brass / Percussion", section: "brass", style: "", role: "", character: "" }
+        { id: "guitar", label: "Guitare Skank", type: "guitar", section: "guitar", style: "Skank offbeat", role: "Offbeat", character: "Choppy" },
+        { id: "brass-perc", label: "Brass / Percussion", type: "brass", section: "brass", style: "Horn stabs", role: "Accent", character: "Bright" }
     ],
     rock: [
-        { id: "guitar1", label: "Guitare 1", section: "guitar", style: "", role: "", character: "" },
-        { id: "guitar2", label: "Guitare 2", section: "guitar", style: "", role: "", character: "" }
+        { id: "guitar1", label: "Guitare 1 (Lead)", type: "guitar", section: "guitar", style: "Electric distorted", role: "Solo", character: "Aggressive" },
+        { id: "guitar2", label: "Guitare 2 (Rhythm)", type: "guitar", section: "guitar", style: "Electric crunch", role: "Rhythm", character: "Powerful" }
     ],
     electronic: [
-        { id: "synth-lead", label: "Synth Lead", section: "synth", style: "", role: "", character: "" },
-        { id: "synth-pad", label: "Synth Pad", section: "synth", style: "", role: "", character: "" }
+        { id: "synth-lead", label: "Synth Lead", type: "synth", section: "synth", style: "Analog lead", role: "Lead", character: "Sharp" },
+        { id: "synth-pad", label: "Synth Pad", type: "synth", section: "synth", style: "Pad", role: "Texture", character: "Dreamy" }
     ],
     jazz: [
-        { id: "piano", label: "Piano", section: "keys", style: "", role: "", character: "" },
-        { id: "brass", label: "Brass", section: "brass", style: "", role: "", character: "" }
+        { id: "piano", label: "Piano", type: "keys", section: "keys", style: "Grand piano", role: "Chords", character: "Smooth" },
+        { id: "brass", label: "Brass", type: "brass", section: "brass", style: "Section stabs", role: "Accent", character: "Warm" }
     ]
 };
+
+function tweakCardByStyle(card, style) {
+    const s = (style || "").toLowerCase();
+    if (s.includes("reggae") || s.includes("rasta")) {
+        if (card.section === "guitar") { card.style = "Skank offbeat"; card.role = "Offbeat"; card.character = "Choppy"; }
+        if (card.section === "bass") { card.style = "Thick round bass"; card.role = "Groove"; card.character = "Round"; }
+        if (card.section === "drums") { card.style = "One drop"; card.role = "Rythm"; card.character = "Loose"; }
+    } else if (s.includes("jazz") || s.includes("blues")) {
+        if (card.section === "drums") { card.style = "Brush kit"; card.role = "Swing"; card.character = "Smooth"; }
+        if (card.section === "bass") { card.style = "Upright walking"; card.role = "Melodic"; card.character = "Smooth"; }
+        if (card.section === "keys") { card.style = "Grand piano"; card.role = "Chords"; card.character = "Smooth"; }
+        if (card.section === "guitar") { card.style = "Jazz guitar clean"; card.role = "Solo"; card.character = "Warm"; }
+    } else if (s.includes("hip-hop") || s.includes("trap") || s.includes("drill")) {
+        if (card.section === "synth" || card.section === "bass") { card.style = "808 sub"; card.role = "Pulsant"; card.character = "Darker"; }
+        if (card.section === "drums") { card.style = "808 kit"; card.role = "Rythm"; card.character = "Sharp"; }
+    } else if (s.includes("rock") || s.includes("metal") || s.includes("punk")) {
+        if (card.section === "guitar") { card.style = "Electric distorted"; card.role = "Lead + Rhythm"; card.character = "Aggressive"; }
+        if (card.section === "bass") { card.style = "Pick bass"; card.role = "Groove"; card.character = "Aggressive"; }
+        if (card.section === "drums") { card.style = "Live kit"; card.role = "Rythm"; card.character = "Powerful"; }
+    } else if (s.includes("electro") || s.includes("electronic") || s.includes("dance") || s.includes("house")) {
+        if (card.section === "synth") { card.style = "Analog lead"; card.role = "Lead"; card.character = "Sharp"; }
+        if (card.section === "bass") { card.style = "Synthesized bass"; card.role = "Lead"; card.character = "Sharp"; }
+    } else if (s.includes("classique") || s.includes("orchestre") || s.includes("philharmo") || s.includes("opera")) {
+        if (card.section === "strings") { card.style = "Orchestral"; card.role = "Pad"; card.character = "Warm"; }
+        if (card.section === "brass") { card.style = "Symphonic"; card.role = "Accent"; card.character = "Majestic"; }
+    }
+    return card;
+}
+
+// Complète une carte d'instruments (vide ou partielle) avec les valeurs par
+// défaut de sa catégorie + paufinage selon le style courant.
+function fillCardDefaults(card) {
+    const lib = INSTRUMENT_LIBRARY[card.type] || INSTRUMENT_LIBRARY[card.section] || INSTRUMENT_LIBRARY.custom;
+    const out = {
+        id: card.id || ("card-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7)),
+        label: card.label || lib.label,
+        section: card.section || lib.section,
+        type: card.type || lib.section || "custom",
+        icon: lib.icon,
+        color: lib.color,
+        style: card.style || lib.style,
+        role: card.role || lib.role,
+        character: card.character || lib.character
+    };
+    tweakCardByStyle(out, state.style);
+    // ne jamais écraser une valeur explicitement fournie par le preset/utilisateur
+    if (card.style) out.style = card.style;
+    if (card.role) out.role = card.role;
+    if (card.character) out.character = card.character;
+    if (card.label) out.label = card.label;
+    if (card.icon && card.color) { out.icon = card.icon; out.color = card.color; }
+    return out;
+}
 
 function getConfigTemplate(config) {
     return CONFIG_CARD_TEMPLATES[config] || CONFIG_CARD_TEMPLATES.solo;
@@ -677,9 +809,13 @@ function renderInstrumentCards() {
         el.className = "bg-[#0f0f1a] border border-purple-800/70 rounded-xl p-4 space-y-2";
         el.innerHTML = `
             <div class="flex items-center justify-between">
-                <label class="text-xs font-medium text-gray-300">${escapeHtml(card.label)}</label>
-                <button type="button" class="text-xs text-red-400 hover:text-red-300" data-remove-card="${escapeHtml(card.id)}">
-                    <i class="fa-solid fa-trash mr-1"></i>Supprimer
+                                <label class="text-xs font-medium text-gray-300 flex items-center gap-2">
+                    <i class="fa-solid ${card.icon || "fa-cube"} ${card.color || "text-slate-400"}"></i>
+                    <span>${escapeHtml(card.label)}</span>
+                    <span class="text-[10px] text-gray-500 bg-[#1a1a2e] rounded px-1.5 py-0.5">${escapeHtml(card.type || "custom")}</span>
+                </label>
+                <button type="button" class="text-xs text-red-400 hover:text-red-300" data-remove-card="${escapeHtml(card.id)}" title="Supprimer">
+                    <i class="fa-solid fa-trash"></i>
                 </button>
             </div>
             <input type="text" value="${escapeHtml(card.style || "")}" data-card-id="${escapeHtml(card.id)}" data-card-key="style" placeholder="Style" class="w-full rounded-lg bg-[#1a1a2e] border border-purple-800/70 px-2 py-1.5 text-xs outline-none focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/30">
@@ -711,13 +847,60 @@ function renderInstrumentCards() {
     });
 }
 
+function buildInstrumentPicker() {
+    const picker = $("instrument-type-picker");
+    if (!picker) return;
+    picker.innerHTML = "";
+    INSTRUMENT_TYPE_ORDER.forEach(typeKey => {
+        const lib = INSTRUMENT_LIBRARY[typeKey];
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "type-pick-btn flex items-center gap-2 px-3 py-2 rounded-lg bg-[#0f0f1a] border border-purple-800/70 hover:bg-purple-700/30 text-left transition";
+        btn.dataset.type = typeKey;
+        btn.innerHTML = `<i class="fa-solid ${lib.icon} ${lib.color} mr-1"></i><span class="text-sm">${lib.label}</span>`;
+        btn.addEventListener("click", () => addInstrumentCardOfType(typeKey));
+        picker.appendChild(btn);
+    });
+    // bouton "Annuler" pour refermer le picker sans ajouter
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.className = "type-pick-btn flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-red-300 text-sm";
+    cancel.dataset.type = "";
+    cancel.innerHTML = `<i class="fa-solid fa-xmark mr-1"></i>Annuler`;
+    cancel.addEventListener("click", hideInstrumentPicker);
+    picker.appendChild(cancel);
+}
+
 function addInstrumentCard() {
-    const id = "card-" + Date.now();
+    const picker = $("instrument-type-picker");
+    if (!picker) return;
+    buildInstrumentPicker();
+    picker.classList.remove("hidden");
+    picker.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+function addInstrumentCardOfType(typeKey) {
+    if (typeKey === "" || typeKey === "cancel") { hideInstrumentPicker(); return; }
+    const lib = INSTRUMENT_LIBRARY[typeKey] || INSTRUMENT_LIBRARY.custom;
+    const id = "card-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6);
+    const card = {
+        id, label: lib.label, section: lib.section, type: typeKey,
+        style: lib.style, role: lib.role, character: lib.character,
+        icon: lib.icon, color: lib.color
+    };
     state.instrumentCards = state.instrumentCards || [];
-    state.instrumentCards.push({ id, label: "Instrument", section: "custom", style: "", role: "", character: "" });
+    state.instrumentCards.push(fillCardDefaults(card));
+    hideInstrumentPicker();
     saveState();
     renderInstrumentCards();
+    toast(`Instrument ajouté : ${lib.label}`, "success");
 }
+
+function hideInstrumentPicker() {
+    const picker = $("instrument-type-picker");
+    if (picker) picker.classList.add("hidden");
+}
+
 
 function removeInstrumentCard(id) {
     state.instrumentCards = (state.instrumentCards || []).filter(c => c.id !== id);
@@ -810,13 +993,15 @@ function assemblePrompt() {
     }
 
     if (state.instrumentCards && state.instrumentCards.length > 0) {
+        const cardLines = [];
         state.instrumentCards.forEach(card => {
             const cardParts = [];
             if (card.style) cardParts.push(`style : ${card.style}`);
             if (card.role) cardParts.push(`rôle : ${card.role}`);
             if (card.character) cardParts.push(`caractère : ${card.character}`);
-            if (cardParts.length) parts.push(`${card.label} : ${cardParts.join(", ")}`);
+            if (cardParts.length) cardLines.push(`- ${card.label} : ${cardParts.join(", ")}`);
         });
+        if (cardLines.length) parts.push(`Instruments :\n${cardLines.join("\n")}`);
     }
 
     if (state.mixMode && (state.mixStyles.length >= 2 || state.mixArtists.length >= 2)) {
@@ -865,8 +1050,46 @@ function syncUiFromState() {
     if (styleSelect && state.style) styleSelect.value = state.style;
     if (artistSelect && state.artist) artistSelect.value = state.artist;
 
-    const setVal = (id, val) => { const el = $(id); if (el) el.value = val; };
-    const setChecked = (id, val) => { const el = $(id); if (el) el.checked = val; };
+    // Normalisation des libellés -> valeurs d'option des <select>
+const NORMALIZE_MAPS = {
+    "drum-kit": { "808": "808", "acoustic": "acoustic", "electronic": "electronic" },
+    "vocal-range": { "Tenor": "tenor", "Baritone": "baritone", "Basse": "bass", "Full": "full" },
+    "harmony-progression": { "I–V–vi–IV": "I-V-vi-IV", "ii–V–I": "ii-V-I", "I–vi–IV–V": "I-vi-IV-V" }
+};
+
+function normLabel(str) {
+    return String(str).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[\u2012-\u2019]/g, "-").replace(/\s+/g, "");
+}
+
+// Applique une valeur (texte libre ou valeur) à un <select> en toute sûreté :
+// - match par value exact,
+// - sinon correspondance par texte (normalisé, ignore accents/casse/tirets),
+// - sinon crée une <option personnalisée> contenant la valeur texte.
+function applySelectValue(select, raw) {
+    if (!select || raw === undefined || raw === null) return;
+    const val = String(raw).trim();
+    if (val === "") { select.value = ""; return; }
+    if (select.value === val) return;
+    if (select.querySelector(`option[value="${val}"]`)) { select.value = val; return; }
+    const map = NORMALIZE_MAPS[select.id];
+    if (map && map[val] && select.querySelector(`option[value="${map[val]}"]`)) { select.value = map[val]; return; }
+    const norm = normLabel(val);
+    const best = Array.from(select.options).find(o => o.value && normLabel(o.text) === norm);
+    if (best) { select.value = best.value; return; }
+    const custom = document.createElement("option");
+    custom.value = val;
+    custom.textContent = `${val} (perso)`;
+    select.insertBefore(custom, select.firstChild);
+    select.value = val;
+}
+
+const setVal = (id, val) => {
+    const el = $(id);
+    if (!el) return;
+    if (el.tagName === "SELECT") applySelectValue(el, val);
+    else el.value = val;
+};
+const setChecked = (id, val) => { const el = $(id); if (el) el.checked = val; };
 
     setVal("drum-style", state.drumStyle);
     setVal("drum-kit", state.drumKit);
@@ -902,6 +1125,12 @@ function syncUiFromState() {
 
     setVal("production-atmosphere", state.productionAtmosphere);
     setVal("production-reference", state.productionReference);
+    const effContainer = $("production-effects");
+    if (effContainer) {
+        effContainer.querySelectorAll("input[type='checkbox']").forEach(cb => {
+            cb.checked = (state.productionEffects || []).includes(cb.value);
+        });
+    }
 
     setChecked("mix-mode-toggle", state.mixMode);
     const mixStyleGroup = $("mix-style-group");
@@ -1132,14 +1361,16 @@ function init() {
     if (state.mixMode) populateMixSelects();
     syncUiFromState();
     initPresetChipsAndSelect();
+    initConfigTabs();
     loadStudioPresets();
 
     // Configuration cards
     document.querySelectorAll(".config-card").forEach(card => {
         card.addEventListener("click", () => {
-            state.config = card.dataset.config;
+                        state.config = card.dataset.config;
+            state.selectedPresetId = ""; // config manuelle : le modèle choisi n'a plus la priorité
             const template = getConfigTemplate(state.config);
-            state.instrumentCards = template.map(c => ({ ...c }));
+            state.instrumentCards = template.map(c => fillCardDefaults(c));
             updateConfigCards();
             saveState();
             syncUiFromState();
@@ -1152,6 +1383,7 @@ function init() {
     if (styleSelect) {
         styleSelect.addEventListener("change", (e) => {
             state.style = e.target.value;
+            state.selectedPresetId = ""; // réglage manuel : priorité au détail
             populateArtistSelect(state.style);
             saveState();
             if (state.style) {
@@ -1165,6 +1397,7 @@ function init() {
     if (artistSelect) {
         artistSelect.addEventListener("change", (e) => {
             state.artist = e.target.value;
+            state.selectedPresetId = ""; // réglage manuel : priorité au détail
             saveState();
         });
     }
@@ -1265,6 +1498,7 @@ function init() {
     function updateMixModeUI() {
         const enabled = mixModeToggle && mixModeToggle.checked;
         state.mixMode = enabled;
+        if (enabled) state.selectedPresetId = ""; // mode mix : priorité au mélange manuel
         if (mixStyleGroup) mixStyleGroup.classList.toggle("hidden", !enabled);
         if (mixArtistGroup) mixArtistGroup.classList.toggle("hidden", !enabled);
         if (enabled) populateMixSelects();

@@ -74,7 +74,10 @@
             font-size: 12px;
             font-weight: bold;
         }
-    </style>
+    /* Picker de types d'instruments (affiché via .classList.remove("hidden")) */
+#instrument-type-picker { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+#instrument-type-picker.hidden { display: none; }
+</style>
 </head>
 <body class="bg-[#0f0f1a] text-gray-100 min-h-screen">
     <nav class="bg-[#1a1a2e] border-b border-purple-900/50 sticky top-0 z-50">
@@ -92,36 +95,6 @@
             </div>
         </div>
     </nav>
-
-    <!-- Studio Presets Section -->
-    <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div class="bg-[#1a1a2e] rounded-xl border border-purple-800/50 p-6">
-            <h2 class="text-lg font-bold mb-4 text-gray-200">
-                <i class="fa-solid fa-wand-magic-sparkles text-fuchsia-400 mr-2"></i>Configuration type
-            </h2>
-            <div class="flex flex-wrap gap-3 mb-4">
-                <button class="studio-preset-chip px-4 py-2 rounded-lg bg-purple-600/80 hover:bg-purple-500 text-sm font-semibold transition" data-preset="rock-pop-beatles">Rock-Pop Beatles</button>
-                <button class="studio-preset-chip px-4 py-2 rounded-lg bg-purple-600/80 hover:bg-purple-500 text-sm font-semibold transition" data-preset="reggae-bob-marley">Reggae Bob Marley</button>
-                <button class="studio-preset-chip px-4 py-2 rounded-lg bg-purple-600/80 hover:bg-purple-500 text-sm font-semibold transition" data-preset="funk-stevie-wonder">Funk Stevie Wonder</button>
-                <button class="studio-preset-chip px-4 py-2 rounded-lg bg-purple-600/80 hover:bg-purple-500 text-sm font-semibold transition" data-preset="drill-gazo">Drill Gazo</button>
-                <button class="studio-preset-chip px-4 py-2 rounded-lg bg-purple-600/80 hover:bg-purple-500 text-sm font-semibold transition" data-preset="hip-hop-travis-scott">Hip-Hop Travis Scott</button>
-                <button class="studio-preset-chip px-4 py-2 rounded-lg bg-purple-600/80 hover:bg-purple-500 text-sm font-semibold transition" data-preset="synthwave-kavinsky">Synthwave Kavinsky</button>
-                <button class="studio-preset-chip px-4 py-2 rounded-lg bg-purple-600/80 hover:bg-purple-500 text-sm font-semibold transition" data-preset="afrobeat-burna-boy">Afrobeat Burna Boy</button>
-                <button class="studio-preset-chip px-4 py-2 rounded-lg bg-purple-600/80 hover:bg-purple-500 text-sm font-semibold transition" data-preset="house-dua-lipa">House Dua Lipa</button>
-                <button class="studio-preset-chip px-4 py-2 rounded-lg bg-purple-600/80 hover:bg-purple-500 text-sm font-semibold transition" data-preset="soul-marvin-gaye">Soul Marvin Gaye</button>
-                <button class="studio-preset-chip px-4 py-2 rounded-lg bg-purple-600/80 hover:bg-purple-500 text-sm font-semibold transition" data-preset="jazz-miles-davis">Jazz Miles Davis</button>
-                <button class="studio-preset-chip px-4 py-2 rounded-lg bg-purple-600/80 hover:bg-purple-500 text-sm font-semibold transition" data-preset="metal-metallica">Metal Metallica</button>
-                <button class="studio-preset-chip px-4 py-2 rounded-lg bg-purple-600/80 hover:bg-purple-500 text-sm font-semibold transition" data-preset="orchestral-philharmonic">Orchestre Philharmonique</button>
-                <button class="studio-preset-chip px-4 py-2 rounded-lg bg-purple-600/80 hover:bg-purple-500 text-sm font-semibold transition" data-preset="opera">Opéra</button>
-            </div>
-            <div class="flex items-center gap-4">
-                <span class="text-xs text-slate-400">Ou sélectionnez depuis la base d'artistes</span>
-                <select id="artist-preset-select" class="flex-1 rounded-lg bg-[#0f0f1a] border border-purple-800/70 px-3 py-2 text-sm">
-                    <option value="">-- Choisir un artiste --</option>
-                </select>
-            </div>
-        </div>
-    </section>
 
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
         <!-- Workflow Steps Indicator -->
@@ -149,12 +122,51 @@
             </div>
         </div>
 
-        <!-- Configuration musicale -->
+        <!-- 1. Configuration (modèle rapide + détaillée, fusionnées) -->
         <section class="bg-[#1a1a2e] rounded-xl border border-purple-800/50 p-6">
             <h2 class="text-lg font-bold mb-1 text-gray-200">
-                <i class="fa-solid fa-layer-group text-fuchsia-400 mr-2"></i>1. Choisis ta configuration
+                <i class="fa-solid fa-layer-group text-fuchsia-400 mr-2"></i>1. Configuration
             </h2>
-            <p class="text-xs text-gray-400 mb-4">Sélectionne d'abord une configuration d'ensemble, puis un style/genre présent dans la base.</p>
+            <p class="text-xs text-gray-400 mb-4">Choisis la facilité/rapidité avec une <strong>config modèle</strong>, ou détaille ta config manuellement (type d'ensemble, style, artiste, mix). Clique ensuite sur « Appliquer la config auto » : les bonnes cartes d'instruments sont créées et tous les réglages détaillés + sélecteurs sont pré-remplis. Tout reste modifiable et supprimable ensuite.</p>
+
+            <!-- Onglets -->
+            <div class="flex gap-2 mb-4">
+                <button id="tab-modele" type="button" class="config-tab px-4 py-2 rounded-lg text-sm font-semibold transition bg-fuchsia-600 text-white shadow-md shadow-fuchsia-600/25">
+                    <i class="fa-solid fa-bolt mr-1"></i>Modèle (rapide)
+                </button>
+                <button id="tab-detaillee" type="button" class="config-tab px-4 py-2 rounded-lg text-sm font-semibold transition bg-[#0f0f1a] text-gray-400 border border-purple-800/70 hover:border-fuchsia-500/50">
+                    <i class="fa-solid fa-sliders mr-1"></i>Détaillée (manuel)
+                </button>
+            </div>
+
+            <!-- Onglet Modèle : configs prêtes à l'emploi -->
+            <div id="config-panel-modele" class="mb-4">
+                <div class="flex flex-wrap gap-3 mb-4">
+                    <button class="studio-preset-chip px-4 py-2 rounded-lg bg-purple-600/80 hover:bg-purple-500 text-sm font-semibold transition" data-preset="rock-pop-beatles">Rock-Pop Beatles</button>
+                    <button class="studio-preset-chip px-4 py-2 rounded-lg bg-purple-600/80 hover:bg-purple-500 text-sm font-semibold transition" data-preset="reggae-bob-marley">Reggae Bob Marley</button>
+                    <button class="studio-preset-chip px-4 py-2 rounded-lg bg-purple-600/80 hover:bg-purple-500 text-sm font-semibold transition" data-preset="funk-stevie-wonder">Funk Stevie Wonder</button>
+                    <button class="studio-preset-chip px-4 py-2 rounded-lg bg-purple-600/80 hover:bg-purple-500 text-sm font-semibold transition" data-preset="drill-gazo">Drill Gazo</button>
+                    <button class="studio-preset-chip px-4 py-2 rounded-lg bg-purple-600/80 hover:bg-purple-500 text-sm font-semibold transition" data-preset="hip-hop-travis-scott">Hip-Hop Travis Scott</button>
+                    <button class="studio-preset-chip px-4 py-2 rounded-lg bg-purple-600/80 hover:bg-purple-500 text-sm font-semibold transition" data-preset="synthwave-kavinsky">Synthwave Kavinsky</button>
+                    <button class="studio-preset-chip px-4 py-2 rounded-lg bg-purple-600/80 hover:bg-purple-500 text-sm font-semibold transition" data-preset="afrobeat-burna-boy">Afrobeat Burna Boy</button>
+                    <button class="studio-preset-chip px-4 py-2 rounded-lg bg-purple-600/80 hover:bg-purple-500 text-sm font-semibold transition" data-preset="house-dua-lipa">House Dua Lipa</button>
+                    <button class="studio-preset-chip px-4 py-2 rounded-lg bg-purple-600/80 hover:bg-purple-500 text-sm font-semibold transition" data-preset="soul-marvin-gaye">Soul Marvin Gaye</button>
+                    <button class="studio-preset-chip px-4 py-2 rounded-lg bg-purple-600/80 hover:bg-purple-500 text-sm font-semibold transition" data-preset="jazz-miles-davis">Jazz Miles Davis</button>
+                    <button class="studio-preset-chip px-4 py-2 rounded-lg bg-purple-600/80 hover:bg-purple-500 text-sm font-semibold transition" data-preset="metal-metallica">Metal Metallica</button>
+                    <button class="studio-preset-chip px-4 py-2 rounded-lg bg-purple-600/80 hover:bg-purple-500 text-sm font-semibold transition" data-preset="orchestral-philharmonic">Orchestre Philharmonique</button>
+                    <button class="studio-preset-chip px-4 py-2 rounded-lg bg-purple-600/80 hover:bg-purple-500 text-sm font-semibold transition" data-preset="opera">Opéra</button>
+                </div>
+                <div class="flex items-center gap-4">
+                    <span class="text-xs text-slate-400">Ou sélectionnez depuis la base d'artistes</span>
+                    <select id="artist-preset-select" class="flex-1 rounded-lg bg-[#0f0f1a] border border-purple-800/70 px-3 py-2 text-sm">
+                        <option value="">-- Choisir un artiste --</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Onglet Détaillée : configuration manuelle -->
+            <div id="config-panel-detaillee" class="hidden">
+            <p class="text-xs text-gray-400 mb-3">Sélectionne un type d'ensemble, puis un style/genre présent dans la base.</p>
             <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 mb-4">
                 <button data-config="solo" class="config-card active bg-[#1a1a2e] border-2 border-purple-800/50 rounded-xl p-4 text-center cursor-pointer hover:border-fuchsia-500/50">
                     <i class="fa-solid fa-guitar text-2xl mb-2 text-fuchsia-400"></i>
@@ -242,11 +254,14 @@
                 </div>
             </div>
 
-            <div class="mt-4 flex items-center gap-3">
-                <button id="btn-auto-configure" type="button" class="px-4 py-2 rounded-lg bg-fuchsia-600 hover:bg-fuchsia-500 text-white text-sm font-semibold transition shadow-md shadow-fuchsia-600/25">
-                    <i class="fa-solid fa-wand-magic-sparkles mr-1"></i>Configurer auto
+            </div>
+
+            <!-- Bouton d'application commun aux deux onglets -->
+            <div class="mt-6 pt-4 border-t border-purple-800/50 flex flex-wrap items-center gap-3">
+                <button id="btn-auto-configure" type="button" class="px-5 py-2.5 rounded-lg bg-fuchsia-600 hover:bg-fuchsia-500 text-white text-sm font-bold transition shadow-md shadow-fuchsia-600/25">
+                    <i class="fa-solid fa-wand-magic-sparkles mr-1"></i>Appliquer la config auto
                 </button>
-                <span class="text-xs text-gray-400">Applique automatiquement tous les réglages selon le style / l'artiste / le mix sélectionné.</span>
+                <span class="text-xs text-gray-400">Crée les bonnes cartes d'instruments et pré-remplit tous les réglages détaillés + sélecteurs, selon ta configuration. Chaque carte reste modifiable et supprimable.</span>
             </div>
         </section>
 
@@ -455,17 +470,18 @@
                 </div>
             </div>
 
-            <!-- Instruments supplémentaires -->
+            <!-- 2. Instruments -->
             <div class="bg-[#1a1a2e] rounded-xl border border-purple-800/50 p-6">
                 <div class="flex items-center justify-between mb-4">
                     <h3 class="text-md font-bold text-gray-200">
-                        <i class="fa-solid fa-guitar text-fuchsia-400 mr-2"></i>2. Instruments supplémentaires
+                        <i class="fa-solid fa-guitar text-fuchsia-400 mr-2"></i>2. Instruments
                     </h3>
                     <button id="btn-add-instrument" type="button" class="px-3 py-1.5 rounded-lg bg-fuchsia-600 hover:bg-fuchsia-500 text-white text-xs font-semibold transition">
-                        <i class="fa-solid fa-plus mr-1"></i>Ajouter
+                        <i class="fa-solid fa-plus mr-1"></i>Ajouter un instrument
                     </button>
                 </div>
-                <p class="text-xs text-gray-400 mb-3">Ces cartes sont automatiquement remplies quand tu choisis une configuration ou un modèle. Tu peux ensuite tout personnaliser.</p>
+                <p class="text-xs text-gray-400 mb-3">Toutes les cartes sont pré-remplies par « Appliquer la config auto » selon ta configuration. Ajoute d'autres instruments, puis modifie ou supprime librement chaque carte pour personnaliser ta config.</p>
+                <div id="instrument-type-picker" class="hidden mb-3"></div>
                 <div id="instrument-cards-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
             </div>
         </div>
