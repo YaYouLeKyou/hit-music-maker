@@ -764,6 +764,7 @@ function fillCardDefaults(card) {
         label: card.label || lib.label,
         section: card.section || lib.section,
         type: card.type || lib.section || "custom",
+        muted: card.muted || false,
         icon: lib.icon,
         color: lib.color,
         style: card.style || lib.style,
@@ -807,7 +808,8 @@ function renderInstrumentCards() {
     const cards = state.instrumentCards || [];
     cards.forEach(card => {
         const el = document.createElement("div");
-        el.className = "bg-[#0f0f1a] border border-purple-800/70 rounded-xl p-4 space-y-2";
+        el.dataset.cardRoot = card.id;
+        el.className = "bg-[#0f0f1a] border border-purple-800/70 rounded-xl p-4 space-y-2" + (card.muted ? " card-muted" : "");
         el.innerHTML = `
             <div class="flex items-center justify-between">
                                 <label class="text-xs font-medium text-gray-300 flex items-center gap-2">
@@ -815,9 +817,14 @@ function renderInstrumentCards() {
                     <span>${escapeHtml(card.label)}</span>
                     <span class="text-[10px] text-gray-500 bg-[#1a1a2e] rounded px-1.5 py-0.5">${escapeHtml(card.type || "custom")}</span>
                 </label>
-                <button type="button" class="text-xs text-red-400 hover:text-red-300" data-remove-card="${escapeHtml(card.id)}" title="Supprimer">
-                    <i class="fa-solid fa-trash"></i>
-                </button>
+                <div class="flex items-center gap-2">
+                    <button type="button" class="${card.muted ? "text-amber-400 hover:text-amber-300" : "text-gray-400 hover:text-gray-200"}" data-toggle-mute="${escapeHtml(card.id)}" title="Mute / Activer">
+                        <i class="fa-solid ${card.muted ? "fa-volume-xmark" : "fa-volume-high"}"></i>
+                    </button>
+                    <button type="button" class="text-xs text-red-400 hover:text-red-300" data-remove-card="${escapeHtml(card.id)}" title="Supprimer">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                </div>
             </div>
             <input type="text" value="${escapeHtml(card.style || "")}" data-card-id="${escapeHtml(card.id)}" data-card-key="style" placeholder="Style" class="w-full rounded-lg bg-[#1a1a2e] border border-purple-800/70 px-2 py-1.5 text-xs outline-none focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/30">
             <input type="text" value="${escapeHtml(card.role || "")}" data-card-id="${escapeHtml(card.id)}" data-card-key="role" placeholder="Rôle" class="w-full rounded-lg bg-[#1a1a2e] border border-purple-800/70 px-2 py-1.5 text-xs outline-none focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/30">
@@ -844,6 +851,24 @@ function renderInstrumentCards() {
             state.instrumentCards = state.instrumentCards.filter(c => c.id !== cardId);
             saveState();
             renderInstrumentCards();
+        });
+    });
+
+    container.querySelectorAll("button[data-toggle-mute]").forEach(btn => {
+        btn.addEventListener("click", () => {
+            const cardId = btn.dataset.toggleMute;
+            const card = state.instrumentCards.find(c => c.id === cardId);
+            if (!card) return;
+            card.muted = !card.muted;
+            saveState();
+            const cardEl = btn.closest("[data-card-root]");
+            if (cardEl) cardEl.classList.toggle("card-muted", card.muted);
+            const icon = btn.querySelector("i");
+            if (icon) icon.className = card.muted ? "fa-solid fa-volume-xmark" : "fa-solid fa-volume-high";
+            btn.classList.toggle("text-amber-400", card.muted);
+            btn.classList.toggle("hover:text-amber-300", card.muted);
+            btn.classList.toggle("text-gray-400", !card.muted);
+            btn.classList.toggle("hover:text-gray-200", !card.muted);
         });
     });
 }
@@ -1019,6 +1044,12 @@ function scheduleLyricsSave() {
 }
 
 function initLyricsBlocks() {
+    // Auto-diagnostic cache : si le JS est à jour mais que le HTML ne contient pas les blocs,
+    // c'est que le navigateur sert une ancienne version de la page.
+    if (!$("lyrics-blocks-container")) {
+        toast("Version de la page en cache détectée — faites Ctrl+F5 pour charger les lyrics détaillées.", "warning");
+        return;
+    }
     document.querySelectorAll(".add-lyrics-block").forEach(btn => {
         btn.addEventListener("click", () => addLyricsBlock(btn.dataset.blockType));
     });
@@ -1178,7 +1209,7 @@ function assemblePrompt() {
 
     if (state.instrumentCards && state.instrumentCards.length > 0) {
         const cardLines = [];
-        state.instrumentCards.forEach(card => {
+        state.instrumentCards.filter(c => !c.muted).forEach(card => {
             const cardParts = [];
             if (card.style) cardParts.push(`style : ${card.style}`);
             if (card.role) cardParts.push(`rôle : ${card.role}`);
