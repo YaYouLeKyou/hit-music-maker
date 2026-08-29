@@ -48,6 +48,8 @@ let state = {
     mixMode: false,
     mixStyles: [],
     mixArtists: [],
+    stylePrompt: "",
+    coverPrompt: "",
     finalPrompt: "",
     instrumentCards: []
 };
@@ -1304,6 +1306,14 @@ async function generateLyricsWithAi(isAutoMode = false) {
             const themeEl = $("lyrics-theme");
             if (themeEl) themeEl.value = state.lyricsTheme;
         }
+        if (data.stylePrompt) {
+            state.stylePrompt = data.stylePrompt;
+        }
+        if (data.coverPrompt) {
+            state.coverPrompt = data.coverPrompt;
+            const coverPromptEl = $("publish-cover-prompt");
+            if (coverPromptEl) coverPromptEl.value = data.coverPrompt;
+        }
 
         renderLyricsBlocks();
         updateLyricsPreview();
@@ -1412,6 +1422,10 @@ function assemblePrompt() {
         if (state.productionReference) prodParts.push(`référence : ${state.productionReference}`);
         if (state.productionEffects.length > 0) prodParts.push(`effets : ${state.productionEffects.join(", ")}`);
         parts.push(`Production : ${prodParts.join(", ")}`);
+    }
+
+    if (state.coverPrompt) {
+        parts.push(`Cover Prompt : ${state.coverPrompt}`);
     }
 
     if (state.instrumentCards && state.instrumentCards.length > 0) {
@@ -2227,7 +2241,8 @@ function init() {
                         stylePrompt: state.finalPrompt,
                         lyrics,
                         theme,
-                        artistUsed
+                        artistUsed,
+                        coverPrompt: state.coverPrompt || ""
                     })
                 });
                 const data = await res.json().catch(() => null);
@@ -2261,8 +2276,8 @@ function init() {
         setStudioProPublishMode("link");
         setStudioProPublishStatus(null);
         const coverPromptEl = $("publish-cover-prompt");
-        if (coverPromptEl && state.finalPrompt) {
-            coverPromptEl.value = state.finalPrompt.slice(0, 500);
+        if (coverPromptEl && state.coverPrompt) {
+            coverPromptEl.value = state.coverPrompt;
         }
     }
 
