@@ -34,6 +34,55 @@
         .crosshair::after { content: ""; position: absolute; top: 50%; left: 0; right: 0; height: 1px; background: rgba(255,255,255,0.35); transform: translateY(-50%); }
         .crosshair::before { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: rgba(255,255,255,0.35); transform: translateX(-50%); }
 
+        /* Sampler pads */
+        .sampler-pad {
+            aspect-ratio: 1;
+            border-radius: 0.75rem;
+            border: 2px solid rgba(139,92,246,0.35);
+            background: linear-gradient(180deg, rgba(26,26,46,0.9), rgba(15,15,26,0.95));
+            color: #e2e8f0;
+            font-weight: 700;
+            font-size: 0.75rem;
+            cursor: pointer;
+            user-select: none;
+            touch-action: manipulation;
+            transition: transform 0.08s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 0.25rem;
+        }
+        .sampler-pad:hover { border-color: rgba(236,72,153,0.6); }
+        .sampler-pad.pad-active {
+            transform: scale(0.96);
+            border-color: #ec4899 !important;
+            box-shadow: 0 0 18px rgba(236,72,153,0.45);
+        }
+        .sampler-pad .pad-key {
+            font-size: 0.65rem;
+            color: #94a3b8;
+            background: rgba(255,255,255,0.06);
+            border-radius: 999px;
+            padding: 0.15rem 0.4rem;
+            border: 1px solid rgba(255,255,255,0.08);
+        }
+        .sampler-step {
+            height: 18px;
+            border-radius: 999px;
+            border: 1px solid rgba(139,92,246,0.35);
+            background: rgba(15,15,26,0.6);
+            transition: background 0.08s ease, border-color 0.15s ease;
+        }
+        .sampler-step.active {
+            background: rgba(236,72,153,0.35);
+            border-color: rgba(236,72,153,0.7);
+        }
+        .sampler-step.current {
+            border-color: #fbbf24;
+            box-shadow: 0 0 10px rgba(251,191,36,0.35);
+        }
+
         /* Responsive mobile */
         @media (max-width: 640px) {
             /* Header navigation responsive */
@@ -240,6 +289,30 @@
             <div id="set-list" class="space-y-2 text-sm"></div>
             <div id="set-empty" class="text-center py-8 text-slate-400 text-xs">Aucune piste pour l’instant. Ajoutez des titres dans les decks ou lancez l’Auto-Mix.</div>
         </section>
+
+        <!-- Sampler / Beatmaker -->
+        <section class="bg-[#1a1a2e] rounded-xl border border-purple-800/50 p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-bold"><i class="fa-solid fa-drum text-pink-400 mr-2"></i>Sampler / Beatmaker</h2>
+                <div class="flex gap-2 flex-wrap">
+                    <button id="btn-sampler-ai-pack" class="px-3 py-1.5 rounded-lg bg-fuchsia-600/80 hover:bg-fuchsia-500 text-white text-xs font-semibold transition"><i class="fa-solid fa-wand-magic-sparkles mr-1"></i>Pack IA</button>
+                    <button id="btn-sampler-play" class="px-3 py-1.5 rounded-lg bg-emerald-600/80 hover:bg-emerald-500 text-white text-xs font-semibold transition"><i class="fa-solid fa-play mr-1"></i>Play</button>
+                    <button id="btn-sampler-record" class="px-3 py-1.5 rounded-lg bg-red-600/80 hover:bg-red-500 text-white text-xs font-semibold transition"><i class="fa-solid fa-circle mr-1"></i>Rec</button>
+                    <button id="btn-sampler-export" class="px-3 py-1.5 rounded-lg bg-amber-600/80 hover:bg-amber-500 text-white text-xs font-semibold transition"><i class="fa-solid fa-download mr-1"></i>Export WAV</button>
+                    <button id="btn-sampler-clear" class="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-semibold transition"><i class="fa-solid fa-broom mr-1"></i>Clear</button>
+                </div>
+            </div>
+            <div class="flex items-center gap-3 mb-4">
+                <label class="text-xs font-medium text-gray-400">BPM</label>
+                <input id="sampler-bpm" type="number" value="120" min="40" max="240" class="w-20 rounded-lg bg-[#0f0f1a] border border-purple-800/70 px-2 py-1 text-sm text-center">
+                <button id="btn-tap-tempo" class="px-3 py-1.5 rounded-lg bg-purple-700/40 hover:bg-purple-600/50 text-xs font-semibold transition">Tap Tempo</button>
+                <span id="sampler-status" class="text-[11px] text-slate-400">Prêt</span>
+            </div>
+            <div id="sampler-pads" class="grid grid-cols-4 gap-2 mb-4"></div>
+            <div class="overflow-x-auto">
+                <div id="sampler-grid" class="grid gap-1 min-w-[320px]"></div>
+            </div>
+        </section>
     </main>
 
     <footer class="text-center text-xs text-slate-500 py-8">
@@ -254,6 +327,7 @@
 
     <script src="artistes_presets.js"></script>
     <script src="dj_styles.js"></script>
+    <script src="sampler.js"></script>
     <script src="dj-pro.js"></script>
 </body>
 </html>

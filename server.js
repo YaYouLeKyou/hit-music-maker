@@ -768,6 +768,76 @@ app.get("/api/ai-providers", (req, res) => {
 });
 
 /**
+ * Route POST /api/samples/generate-pack
+ * Génère un pack de samples via l'IA (descriptions + métadonnées)
+ * Body: { style?, bpm?, count?, provider?, apiKey? }
+ * Retourne un JSON avec les samples générés
+ */
+app.post("/api/samples/generate-pack", async (req, res) => {
+    try {
+        const { style, bpm, count = 8, provider, apiKey: clientKey } = req.body || {};
+        const selectedProvider = provider || "groq";
+        const providerConfig = AI_PROVIDERS[selectedProvider];
+        if (!providerConfig) {
+            return res.status(400).json({ error: `Provider "${selectedProvider}" inconnu.` });
+        }
+
+        const effectiveApiKey = clientKey && clientKey.trim().length >= 10
+            ? clientKey.trim()
+            : process.env[providerConfig.apiKeyEnv];
+        if (!effectiveApiKey || effectiveApiKey.trim().length < 10) {
+            return res.status(400).json({ error: `Clé API ${providerConfig.name} manquante.` });
+        }
+
+        const styleLabel = style || "électro / urbain";
+        const bpmLabel = bpm || "120";
+        const countLabel = Math.max(1, Math.min(16, Number(count) || 8));
+
+        const systemPrompt = [
+            "Tu es un ingénieur du son expert en conception de packs de samples pour beatmakers.",
+            `Génère ${countLabel} samples pour un beatmaker dans le style "${styleLabel}" à ${bpmLabel} BPM.`,
+            "Réponds UNIQUEMENT avec un objet JSON valide, sans texte autour, sans balises markdown.",
+            "Chaque sample doit avoir : id (string), type (kick|snare|hihat|openhat|clap|tom|rim|cowbell|fx|vocal), label (string court), description (string), bpm (number), key (string ex: 'Am'), duration (number en secondes).",
+            "Exemple : { \"packName\": \"Mon Pack\", \"samples\": [ { \"id\": \"s1\", \"type\": \"kick\", \"label\": \"808 Kick\", \"description\": \"Kick 808 profond et saturé\", \"bpm\": 120, \"key\": \"Am\", \"duration\": 0.3 } ] }"
+        ].join("\n");
+
+        let rawContent;
+        if (providerConfig.format === "gemini") {
+            rawContent = await callGemini({
+                theme: systemPrompt,
+                artist: null,
+                isAutoMode: false,
+                mixData: null
+            });
+        } else {
+            rawContent = await callOpenAICompatible({
+                theme: systemPrompt,
+                artist: null,
+                isAutoMode: false,
+                providerKey: selectedProvider,
+                apiKey: effectiveApiKey,
+                model: providerConfig.defaultModel,
+                mixData: null
+            });
+        }
+
+        let parsed;
+        try {
+            parsed = extractJson(rawContent);
+        } catch (parseErr) {
+            console.error("[samples/generate-pack] Échec parsing JSON :", parseErr.message);
+            return res.status(502).json({ error: "Impossible d'extraire un JSON valide de la réponse du modèle.", raw: (rawContent || "").slice(0, 2000) });
+        }
+
+        const samples = Array.isArray(parsed.samples) ? parsed.samples.slice(0, countLabel) : [];
+        res.json({ packName: parsed.packName || `Pack ${styleLabel}`, samples });
+    } catch (err) {
+        console.error("[samples/generate-pack] Erreur :", err);
+        res.status(500).json({ error: err.message || "Erreur lors de la génération du pack." });
+    }
+});
+
+/**
  * Route GET /api/suno/status/:taskId
  * Interroge le statut de la tâche Suno et renvoie les pistes audio si prêtes.
  */

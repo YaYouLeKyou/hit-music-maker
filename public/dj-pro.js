@@ -439,6 +439,269 @@ function init() {
 
     generateJingles();
     updateCrossfader(50);
+
+    initSampler();
+}
+
+// ------------------------------------------------------------
+// Sampler / Beatmaker
+// ------------------------------------------------------------
+
+function initSampler() {
+    const padDefs = [
+        { type: "kick", label: "Kick", key: "Q" },
+        { type: "snare", label: "Snare", key: "W" },
+        { type: "hihat", label: "Hi-Hat", key: "E" },
+        { type: "openhat", label: "Open HH", key: "R" },
+        { type: "clap", label: "Clap", key: "A" },
+        { type: "tom", label: "Tom", key: "S" },
+        { type: "rim", label: "Rim", key: "D" },
+        { type: "cowbell", label: "Cowbell", key: "F" },
+        { type: "fx", label: "FX", key: "Z" },
+        { type: "vocal", label: "Vocal", key: "X" },
+        { type: "kick", label: "Kick 2", key: "C" },
+        { type: "snare", label: "Snare 2", key: "V" },
+        { type: "hihat", label: "HH 2", key: "1" },
+        { type: "openhat", label: "Open HH2", key: "2" },
+        { type: "clap", label: "Clap 2", key: "3" },
+        { type: "fx", label: "FX 2", key: "4" }
+    ];
+
+    sampler.pads = padDefs.map((def, i) => ({ id: i, ...def, volume: 0.8 }));
+
+    const padsContainer = $("sampler-pads");
+    const gridContainer = $("sampler-grid");
+    if (!padsContainer || !gridContainer) return;
+
+    padsContainer.innerHTML = "";
+    gridContainer.innerHTML = "";
+
+    sampler.pads.forEach((pad, i) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "sampler-pad";
+        btn.dataset.pad = i;
+        btn.innerHTML = `<span>${escapeHtml(pad.label)}</span><span class="pad-key">${pad.key}</span>`;
+        btn.addEventListener("click", () => onPadHit(i));
+        btn.addEventListener("pointerdown", (e) => { e.preventDefault(); onPadHit(i); });
+        padsContainer.appendChild(btn);
+    });
+
+    for (let step = 0; step < 16; step++) {
+        const stepEl = document.createElement("div");
+        stepEl.className = "sampler-step";
+        stepEl.dataset.step = step;
+        stepEl.addEventListener("click", () => {
+            const padId = sampler.pads.length > 0 ? sampler.pads[0].id : null;
+            if (padId === null) return;
+            const active = sampler.toggleStep(step, padId);
+            updateStepUI(step);
+        });
+        gridContainer.appendChild(stepEl);
+    }
+
+    sampler.onStepChange = (step) => {
+        document.querySelectorAll(".sampler-step").forEach((el, i) => {
+            el.classList.toggle("current", i === step);
+        });
+    };
+
+    const bpmInput = $("sampler-bpm");
+    if (bpmInput) {
+        bpmInput.addEventListener("input", () => {
+            sampler.setBPM(bpmInput.value);
+        });
+    }
+
+    $("btn-sampler-play")?.addEventListener("click", () => {
+        if (sampler.isPlaying) {
+            sampler.stopSequencer();
+            setSamplerStatus("Arrêté");
+        } else {
+            sampler.init();
+            sampler.startSequencer();
+            setSamplerStatus("Lecture…");
+        }
+    });
+
+    $("btn-sampler-record")?.addEventListener("click", () => {
+        if (sampler.isRecording) {
+            const notes = sampler.stopRecording();
+            sampler.playRecording(notes);
+            setSamplerStatus(`Loop enregistrée : ${notes.length} notes`);
+        } else {
+            sampler.init();
+            sampler.startRecording();
+            setSamplerStatus("Enregistrement…");
+        }
+    });
+
+    $("btn-sampler-export")?.addEventListener("click", async () => {
+        setSamplerStatus("Export en cours…");
+        try {
+            const buffer = await sampler.exportLoop();
+            if (!buffer) {
+                setSamplerStatus("Rien à exporter.");
+                return;
+            }
+            const wav = bufferToWav(buffer);
+            const blob = new Blob([wav], { type: "audio/wav" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `loop-${Date.now()}.wav`;
+            a.click();
+            URL.revokeObjectURL(url);
+            setSamplerStatus("Export WAV OK");
+        } catch (err) {
+            console.error(err);
+            setSamplerStatus("Export impossible");
+        }
+    });
+
+    $("btn-sampler-clear")?.addEventListener("click", () => {
+        sampler.clearGrid();
+        sampler.stopSequencer();
+        sampler.stopRecording();
+        document.querySelectorAll(".sampler-step").forEach(el => el.classList.remove("active", "current"));
+        setSamplerStatus("Grille vidée");
+    });
+
+    $("btn-tap-tempo")?.addEventListener("click", () => {
+        const now = performance.now();
+        if (!window._tapTimes) window._tapTimes = [];
+        window._tapTimes.push(now);
+        if (window._tapTimes.length > 4) window._tapTimes.shift();
+        if (window._tapTimes.length >= 2) {
+            let sum = 0;
+            for (let i = 1; i < window._tapTimes.length; i++) sum += window._tapTimes[i] - window._tapTimes[i - 1];
+            const avg = sum / (window._tapTimes.length - 1);
+            const bpm = Math.round(60000 / avg);
+            sampler.setBPM(bpm);
+            if (bpmInput) bpmInput.value = bpm;
+        }
+    });
+
+    $("btn-sampler-ai-pack")?.addEventListener("click", async () => {
+        const style = state.djStyle || "électro / urbain";
+        const bpm = sampler.bpm;
+        const provider = ($("provider-select") && $("provider-select").value) || "groq";
+        setSamplerStatus("Génération du pack IA…");
+        try {
+            const res = await fetch("/api/samples/generate-pack", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ style, bpm, count: 8, provider })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+            if (data.samples && data.samples.length) {
+                sampler.pads = data.samples.map((s, i) => ({ id: i, type: s.type || "fx", label: s.label || `Sample ${i + 1}`, volume: 0.8 }));
+                sampler.packName = data.packName || "Pack IA";
+                refreshPadUI();
+                setSamplerStatus(`Pack IA chargé : ${data.samples.length} samples`);
+                toast(`Pack IA généré : ${data.samples.length} samples`, "success");
+            } else {
+                setSamplerStatus("Pack vide");
+            }
+        } catch (err) {
+            console.error(err);
+            setSamplerStatus("Échec génération pack");
+            toast("Échec de la génération du pack IA.", "error");
+        }
+    });
+
+    const keyMap = {};
+    sampler.pads.forEach((pad, i) => { keyMap[pad.key.toLowerCase()] = i; });
+
+    window.addEventListener("keydown", (e) => {
+        if (e.repeat) return;
+        const key = e.key.toLowerCase();
+        const index = keyMap[key];
+        if (index !== undefined) {
+            e.preventDefault();
+            onPadHit(index);
+        }
+        if (e.code === "Space") {
+            e.preventDefault();
+            $("btn-sampler-play")?.click();
+        }
+    });
+}
+
+function onPadHit(index) {
+    sampler.togglePad(index);
+    if (sampler.isRecording) sampler.recordNote(index);
+}
+
+function updateStepUI(step) {
+    const el = document.querySelector(`.sampler-step[data-step="${step}"]`);
+    if (!el) return;
+    const active = sampler.grid[step] && sampler.grid[step].includes(sampler.pads[0]?.id);
+    el.classList.toggle("active", !!active);
+}
+
+function setSamplerStatus(text) {
+    const el = $("sampler-status");
+    if (el) el.textContent = text;
+}
+
+function refreshPadUI() {
+    const padsContainer = $("sampler-pads");
+    if (!padsContainer) return;
+    padsContainer.innerHTML = "";
+    sampler.pads.forEach((pad, i) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "sampler-pad";
+        btn.dataset.pad = i;
+        btn.innerHTML = `<span>${escapeHtml(pad.label)}</span><span class="pad-key">${pad.key}</span>`;
+        btn.addEventListener("click", () => onPadHit(i));
+        btn.addEventListener("pointerdown", (e) => { e.preventDefault(); onPadHit(i); });
+        padsContainer.appendChild(btn);
+    });
+}
+
+function bufferToWav(buffer) {
+    const numChannels = 1;
+    const sampleRate = buffer.sampleRate;
+    const format = 1;
+    const bitDepth = 16;
+    const bytesPerSample = bitDepth / 8;
+    const blockAlign = numChannels * bytesPerSample;
+    const data = buffer.getChannelData(0);
+    const dataLength = data.length * bytesPerSample;
+    const headerLength = 44;
+    const totalLength = headerLength + dataLength;
+    const arrayBuffer = new ArrayBuffer(totalLength);
+    const view = new DataView(arrayBuffer);
+
+    function writeString(offset, str) {
+        for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+    }
+
+    writeString(0, "RIFF");
+    view.setUint32(4, totalLength - 8, true);
+    writeString(8, "WAVE");
+    writeString(12, "fmt ");
+    view.setUint32(16, 16, true);
+    view.setUint16(20, format, true);
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * blockAlign, true);
+    view.setUint16(32, blockAlign, true);
+    view.setUint16(34, bitDepth, true);
+    writeString(36, "data");
+    view.setUint32(40, dataLength, true);
+
+    let offset = 44;
+    for (let i = 0; i < data.length; i++) {
+        const sample = Math.max(-1, Math.min(1, data[i]));
+        view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
+        offset += 2;
+    }
+
+    return arrayBuffer;
 }
 
 document.addEventListener("DOMContentLoaded", init);
