@@ -54,6 +54,8 @@ let state = {
     instrumentCards: []
 };
 
+let isPublishing = false;
+
 // ============================================================
 // Utilitaires
 // ============================================================
@@ -1786,6 +1788,45 @@ function loadProviderConfigPanel(providerId) {
     });
 }
 
+async function generateCaptionAI() {
+    const box = $("publish-caption");
+    const btn = $("btn-caption-regen");
+    if (!box) return;
+
+    const oldBtnHtml = btn ? btn.innerHTML : null;
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i>Génération…';
+    }
+    box.value = "";
+    box.placeholder = "L'IA rédige le texte du post…";
+
+    try {
+        const res = await fetch("/api/caption", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                theme: state.lyricsTheme || state.style || "",
+                stylePrompt: (state.finalPrompt || state.stylePrompt || "").trim(),
+                songTitle: String(state.lyricsTheme || state.style || "Sans titre").slice(0, 80),
+                artistUsed: state.artist || "Artiste Polyvalent"
+            })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.caption) throw new Error(data.error || "Génération impossible");
+        box.value = data.caption;
+    } catch (err) {
+        console.warn("[StudioPro] Texte IA indisponible :", err.message);
+        box.placeholder = "Texte IA indisponible — la légende standard sera utilisée.";
+        toast("Texte IA indisponible : la légende standard sera utilisée.", "warning");
+    } finally {
+        if (btn && oldBtnHtml) {
+            btn.disabled = false;
+            btn.innerHTML = oldBtnHtml;
+        }
+    }
+}
+
 // ============================================================
 // Initialisation
 // ============================================================
@@ -2222,6 +2263,13 @@ function init() {
                 toast("Mode instrumental : pas de publication vocale.", "warning");
                 return;
             }
+            const lyrics = buildLyricsFromBlocks(true) || state.lyricsText || "";
+            const style = (state.finalPrompt || state.stylePrompt || "").trim();
+            if (!lyrics && !style) {
+                toast("Ajoutez des paroles ou un style prompt avant de publier.", "warning");
+                return;
+            }
+
             const originalHtml = btnGenerateMusic.innerHTML;
             btnGenerateMusic.disabled = true;
             btnGenerateMusic.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i>Préparation…';
@@ -2229,7 +2277,6 @@ function init() {
                 state.finalPrompt = assemblePrompt();
                 const finalPromptEl = $("final-prompt");
                 if (finalPromptEl) finalPromptEl.value = state.finalPrompt;
-                const lyrics = buildLyricsFromBlocks(true) || state.lyricsText || "";
                 const theme = state.lyricsTheme || state.style || "";
                 const artistUsed = state.artist || "Artiste Polyvalent";
                 const title = String(theme || "Sans titre").slice(0, 80);
@@ -2258,6 +2305,92 @@ function init() {
         });
     }
 
+    function getUserId() {
+        try {
+            let uid = localStorage.getItem("mhms_user_id");
+            if (!uid) {
+                uid = "user-" + Math.random().toString(36).slice(2, 10) + "-" + Date.now().toString(36).slice(-6);
+                localStorage.setItem("mhms_user_id", uid);
+            }
+            return uid;
+        } catch { return "anon"; }
+    }
+
+    async function compressAudioFile(file) {
+        if (typeof lamejs === "undefined") {
+            throw new Error("Encodeur MP3 (lamejs) non chargé.");
+        }
+        const arrayBuf = await file.arrayBuffer();
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        let decoded;
+        try {
+            decoded = await ctx.decodeAudioData(arrayBuf);
+        } finally {
+            ctx.close().catch(() => {});
+        }
+        const targetRate = 44100;
+        let buffer = decoded;
+        if (decoded.sampleRate !== targetRate || decoded.numberOfChannels > 2) {
+            const frames = Math.max(1, Math.ceil(decoded.duration * targetRate));
+            const offline = new OfflineAudioContext(2, frames, targetRate);
+            const src = offline.createBufferSource();
+            src.buffer = decoded;
+            src.connect(offline.destination);
+            src.start();
+            buffer = await offline.startRendering();
+        }
+        const channels = 2;
+        const budgetBytes = 3.4 * 1024 * 1024;
+        const duration = Math.max(buffer.duration, 1);
+        let kbps = Math.floor((budgetBytes * 8) / duration / 1000);
+        kbps = Math.max(64, Math.min(kbps, 128));
+        function floatTo16(input) {
+            const out = new Int16Array(input.length);
+            for (let i = 0; i < input.length; i++) {
+                const s = Math.max(-1, Math.min(1, input[i]));
+                out[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+            }
+            return out;
+        }
+        const left = floatTo16(buffer.getChannelData(0));
+        const right = floatTo16(buffer.getChannelData(Math.min(1, buffer.numberOfChannels - 1)));
+        const encoder = new lamejs.Mp3Encoder(channels, targetRate, kbps);
+        const blockSize = 1152;
+        const parts = [];
+        for (let i = 0; i < left.length; i += blockSize) {
+            const l = left.subarray(i, i + blockSize);
+            const r = right.subarray(i, i + blockSize);
+            const buf = encoder.encodeBuffer(l, r);
+            if (buf.length > 0) parts.push(new Uint8Array(buf));
+        }
+        const end = encoder.flush();
+        if (end.length > 0) parts.push(new Uint8Array(end));
+        return { blob: new Blob(parts, { type: "audio/mpeg" }), kbps };
+    }
+
+    async function uploadFileViaBlob(file) {
+        const mod = await import("https://esm.sh/@vercel/blob/client");
+        const blob = await mod.upload(`uploads/${Date.now()}-${file.name}`, file, {
+            access: "public",
+            handleUploadUrl: "/api/upload-url",
+            contentType: file.type || "audio/mpeg"
+        });
+        return blob.url;
+    }
+
+    function resetStudioProPublishForm() {
+        const linkInput = $("publish-link-input");
+        const fileInput = $("publish-file-input");
+        const fileName = $("publish-file-name");
+        const caption = $("publish-caption");
+        if (linkInput) linkInput.value = "";
+        if (fileInput) fileInput.value = "";
+        if (fileName) fileName.classList.add("hidden");
+        if (caption) caption.value = "";
+        setStudioProPublishMode("link");
+        setStudioProPublishStatus(null);
+    }
+
     const btnUploadPublish = $("btn-upload-publish");
     if (btnUploadPublish) {
         btnUploadPublish.addEventListener("click", () => {
@@ -2279,13 +2412,19 @@ function init() {
         if (coverPromptEl && state.coverPrompt) {
             coverPromptEl.value = state.coverPrompt;
         }
+        generateCaptionAI();
     }
 
     function closeStudioProPublishModal() {
+        if (isPublishing) {
+            toast("Publication en cours, veuillez patienter…", "warning");
+            return;
+        }
         const modal = $("modal-publish");
         if (!modal) return;
         modal.classList.add("hidden");
         document.body.style.overflow = "";
+        resetStudioProPublishForm();
     }
 
     function setStudioProPublishMode(mode) {
@@ -2351,9 +2490,86 @@ function init() {
         publishModeFile.addEventListener("click", () => setStudioProPublishMode("file"));
     }
 
+    const btnCaptionRegen = $("btn-caption-regen");
+    if (btnCaptionRegen) {
+        btnCaptionRegen.addEventListener("click", generateCaptionAI);
+    }
+
+    const btnCoverPaste = $("btn-publish-cover-paste");
+    if (btnCoverPaste) {
+        btnCoverPaste.addEventListener("click", async () => {
+            try {
+                const text = await navigator.clipboard.readText();
+                if (!text) {
+                    toast("Le presse-papiers est vide.", "warning");
+                    return;
+                }
+                const coverPromptEl = $("publish-cover-prompt");
+                if (coverPromptEl) coverPromptEl.value = text;
+                toast("Cover Prompt collé depuis le presse-papiers !", "success");
+            } catch (err) {
+                toast("Impossible d'accéder au presse-papiers.", "error");
+            }
+        });
+    }
+
+    const publishFileInput = $("publish-file-input");
+    if (publishFileInput) {
+        publishFileInput.addEventListener("change", (e) => {
+            const file = e.target.files[0];
+            const nameSpan = $("publish-file-name");
+            if (!file) {
+                if (nameSpan) nameSpan.classList.add("hidden");
+                return;
+            }
+            if (nameSpan) {
+                nameSpan.textContent = `${file.name} · ${(file.size / 1024 / 1024).toFixed(1)} Mo`;
+                nameSpan.classList.remove("hidden");
+            }
+        });
+    }
+
+    const fileDropZone = $("publish-file-section");
+    if (fileDropZone) {
+        const preventDefaults = (e) => { e.preventDefault(); e.stopPropagation(); };
+        ["dragenter", "dragover", "dragleave", "drop"].forEach((evt) => {
+            fileDropZone.addEventListener(evt, preventDefaults, false);
+        });
+        fileDropZone.addEventListener("dragenter", () => fileDropZone.classList.add("drag-over"));
+        fileDropZone.addEventListener("dragleave", () => fileDropZone.classList.remove("drag-over"));
+        fileDropZone.addEventListener("drop", (e) => {
+            fileDropZone.classList.remove("drag-over");
+            const files = e.dataTransfer?.files;
+            if (files && files.length > 0) {
+                const input = $("publish-file-input");
+                if (input) {
+                    if (typeof DataTransfer !== "undefined") {
+                        const dt = new DataTransfer();
+                        for (const f of files) dt.items.add(f);
+                        input.files = dt.files;
+                    }
+                    input.dispatchEvent(new Event("change"));
+                }
+            }
+        });
+    }
+
+    const modalPublish = $("modal-publish");
+    if (modalPublish) {
+        modalPublish.addEventListener("click", (e) => {
+            if (e.target === modalPublish) closeStudioProPublishModal();
+        });
+    }
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && modalPublish && !modalPublish.classList.contains("hidden")) {
+            closeStudioProPublishModal();
+        }
+    });
+
     const btnPublishConfirm = $("btn-publish-confirm");
     if (btnPublishConfirm) {
         btnPublishConfirm.addEventListener("click", async () => {
+            if (isPublishing) return;
             const linkInput = $("publish-link-input");
             const fileInput = $("publish-file-input");
             const coverPrompt = ($("publish-cover-prompt") && $("publish-cover-prompt").value.trim()) || state.finalPrompt || "";
@@ -2366,6 +2582,23 @@ function init() {
                 return;
             }
 
+            if (audioUrl) {
+                let url;
+                try {
+                    url = new URL(audioUrl);
+                } catch {
+                    setStudioProPublishStatus({ type: "warning", html: "Lien invalide : il doit commencer par https:// (ex : https://suno.com/song/…)." });
+                    return;
+                }
+                const host = url.hostname.toLowerCase().replace(/^www\./, "");
+                const isSunoOrUdio = /(^|\.)suno\.(com|ai)$/.test(host) || /(^|\.)udio\.com$/.test(host);
+                if (url.protocol !== "https:" || !isSunoOrUdio) {
+                    setStudioProPublishStatus({ type: "warning", html: "Le lien doit pointer vers suno.com, suno.ai ou udio.com." });
+                    return;
+                }
+            }
+
+            isPublishing = true;
             btnPublishConfirm.disabled = true;
             btnPublishConfirm.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i>Publication…';
             setStudioProPublishStatus({ type: "info", html: "Publication en cours…" });
@@ -2377,9 +2610,39 @@ function init() {
                 formData.append("theme", state.lyricsTheme || state.style || "");
                 formData.append("songTitle", String(state.lyricsTheme || state.style || "Sans titre").slice(0, 80));
                 formData.append("artistUsed", state.artist || "Artiste Polyvalent");
+                formData.append("userId", getUserId());
                 formData.append("caption", caption);
-                if (audioUrl) formData.append("audioUrl", audioUrl);
-                if (file) formData.append("file", file);
+
+                if (audioUrl) {
+                    formData.append("audioUrl", audioUrl);
+                } else if (file) {
+                    if (!/^audio\//i.test(file.type) && !/\.mp3$/i.test(file.name)) {
+                        throw new Error(`« ${file.name} » n'est pas un fichier audio valide.`);
+                    }
+                    if (file.size > 25 * 1024 * 1024) {
+                        throw new Error(`Fichier trop volumineux (${(file.size / 1024 / 1024).toFixed(1)} Mo). Maximum autorisé : 25 Mo.`);
+                    }
+                    let blobUrl = null;
+                    try {
+                        blobUrl = await uploadFileViaBlob(file);
+                        formData.append("blobAudioUrl", blobUrl);
+                    } catch (blobErr) {
+                        console.warn("[StudioPro] Upload Blob indisponible :", blobErr.message);
+                        if (file.size > 4 * 1024 * 1024) {
+                            try {
+                                const { blob: compressed, kbps } = await compressAudioFile(file);
+                                if (compressed.size > 4 * 1024 * 1024) {
+                                    throw new Error("la compression n'a pas suffi à passer sous la limite");
+                                }
+                                formData.append("file", compressed, "chanson-compressee.mp3");
+                            } catch (cmpErr) {
+                                throw new Error(`Fichier de ${(file.size / 1024 / 1024).toFixed(1)} Mo dépasse la limite de 4,5 Mo de Vercel.`);
+                            }
+                        } else {
+                            formData.append("file", file);
+                        }
+                    }
+                }
 
                 const res = await fetch("/api/publish?progress=1", {
                     method: "POST",
@@ -2437,10 +2700,21 @@ function init() {
                 setStudioProPublishStatus({ type: "error", html: err.message || "Erreur during publication" });
                 toast("Échec de la publication : " + err.message, "error");
             } finally {
+                isPublishing = false;
                 btnPublishConfirm.disabled = false;
                 btnPublishConfirm.innerHTML = '<i class="fa-solid fa-paper-plane mr-1"></i>Publier';
             }
         });
+    }
+
+    // --- Retour de Stripe Checkout (?order=xxx) ou paiement annulé ---
+    const urlParams = new URLSearchParams(window.location.search);
+    const paidOrder = urlParams.get("order");
+    if (paidOrder) {
+        history.replaceState(null, "", window.location.pathname);
+        pollStudioProPaidOrder(paidOrder);
+    } else if (urlParams.get("canceled")) {
+        toast("Paiement annulé — aucun montant n'a été débité.", "warning");
     }
 }
 
