@@ -80,6 +80,33 @@
     /* Picker de types d'instruments (affiché via .classList.remove("hidden")) */
 #instrument-type-picker { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 #instrument-type-picker.hidden { display: none; }
+
+/* Responsive mobile */
+@media (max-width: 640px) {
+    /* Header navigation responsive */
+    nav .flex.items-center.gap-2 {
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+    nav .flex.items-center.gap-2 a,
+    nav .flex.items-center.gap-2 button {
+        font-size: 0.75rem;
+        padding: 0.5rem 0.75rem;
+        white-space: nowrap;
+    }
+
+    /* Step progress bar : wrap on mobile */
+    .flex.items-center.justify-between {
+        flex-wrap: wrap;
+        gap: 0.75rem;
+    }
+    .flex.items-center.justify-between > div {
+        flex: 0 0 auto;
+    }
+    .flex.items-center.justify-between .flex-1 {
+        display: none;
+    }
+}
 </style>
 </head>
 <body class="bg-[#0f0f1a] text-gray-100 min-h-screen">

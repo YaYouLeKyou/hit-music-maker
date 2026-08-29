@@ -33,6 +33,28 @@
         .crosshair { position: absolute; top: 50%; left: 50%; width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.35); border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; }
         .crosshair::after { content: ""; position: absolute; top: 50%; left: 0; right: 0; height: 1px; background: rgba(255,255,255,0.35); transform: translateY(-50%); }
         .crosshair::before { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: rgba(255,255,255,0.35); transform: translateX(-50%); }
+
+        /* Responsive mobile */
+        @media (max-width: 640px) {
+            /* Header navigation responsive */
+            nav .flex.items-center.gap-2,
+            nav .flex.items-center.gap-3 {
+                flex-wrap: wrap;
+                gap: 0.5rem;
+            }
+            nav .flex.items-center.gap-2 a,
+            nav .flex.items-center.gap-2 button,
+            nav .flex.items-center.gap-3 a,
+            nav .flex.items-center.gap-3 button {
+                font-size: 0.75rem;
+                padding: 0.5rem 0.75rem;
+                white-space: nowrap;
+            }
+            /* DJ mode label hidden on very small screens if needed */
+            #dj-mode-label {
+                display: none;
+            }
+        }
     </style>
 </head>
 <body class="text-gray-100 min-h-screen">

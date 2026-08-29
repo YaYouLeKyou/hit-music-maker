@@ -134,6 +134,36 @@
 
             /* Bandeau d'actions du bloc éditeur : empilement propre */
             #view-studio .flex.items-center.justify-between.flex-wrap { row-gap: .6rem; }
+
+            /* Header : navigation responsive sur mobile */
+            header .flex.items-center.gap-2,
+            header nav.flex {
+                flex-wrap: wrap;
+                gap: 0.5rem;
+            }
+            header nav button,
+            header nav a {
+                font-size: 0.75rem;
+                padding: 0.5rem 0.75rem;
+                white-space: nowrap;
+            }
+
+            /* Provider AI : stack select + button on mobile */
+            #ai-providers-config .flex.items-center.gap-3 {
+                flex-wrap: wrap;
+            }
+            #ai-providers-config label[for="provider-select"] {
+                width: 100%;
+                margin-bottom: 0.25rem;
+            }
+            #provider-select {
+                flex: 1 1 auto;
+                min-width: 0;
+            }
+            #btn-show-provider-config {
+                width: 100%;
+                margin-top: 0.5rem;
+            }
         }
 
         /* Tablettes (641–1024px) : aère légèrement les cartes */
