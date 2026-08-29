@@ -2444,4 +2444,105 @@ function init() {
     }
 }
 
+// ------------------------------------------------------------
+// Publication : suivi de commande payée (retour Stripe)
+// ------------------------------------------------------------
+
+async function pollStudioProPaidOrder(orderId) {
+    let attempts = 0;
+    const MAX_ATTEMPTS = 60;
+
+    async function tick() {
+        attempts++;
+        try {
+            const res = await fetch(`/api/order/${encodeURIComponent(orderId)}/status`);
+            const o = await res.json().catch(() => null);
+            if (!res.ok || !o) throw new Error(o?.error || `HTTP ${res.status}`);
+
+            if (o.status === "pending_payment") {
+                if (attempts >= MAX_ATTEMPTS) {
+                    toast("Délai dépassé en attente du paiement.", "warning");
+                    return;
+                }
+                toast("En attente de confirmation du paiement…", "info");
+                setTimeout(tick, 5000);
+                return;
+            }
+
+            if (o.status === "generating") {
+                if (attempts >= MAX_ATTEMPTS) {
+                    toast("La génération prend plus de temps que prévu. Rechargez la page plus tard avec ce même lien.", "warning");
+                    return;
+                }
+                toast(`Paiement confirmé ✅ — génération en cours… (${attempts * 3}%)`, "info");
+                setTimeout(tick, 6000);
+                return;
+            }
+
+            if (o.status === "done" && Array.isArray(o.tracks)) {
+                toast("Musique générée ! Publication automatique en cours…", "success");
+                try {
+                    const payload = {
+                        stylePrompt: (state.finalPrompt || "").trim(),
+                        coverPrompt: (state.coverPrompt || "").trim(),
+                        blocks: state.lyricsBlocks || [],
+                        generatedTheme: state.lyricsTheme || state.style || "",
+                        songTitle: String(state.lyricsTheme || state.style || "Sans titre").slice(0, 80),
+                        artistUsed: state.artist || "Artiste Polyvalent",
+                        audioUrl: o.tracks[0]?.audioUrl || ""
+                    };
+                    const pubRes = await fetch("/api/publish?progress=1", {
+                        method: "POST",
+                        headers: { "X-Publish-Stream": "1", "Content-Type": "application/json" },
+                        body: JSON.stringify(payload)
+                    });
+                    const contentType = pubRes.headers.get("content-type") || "";
+                    if (pubRes.ok && contentType.includes("x-ndjson")) {
+                        const reader = pubRes.body.getReader();
+                        const decoder = new TextDecoder();
+                        let buffer = "";
+                        while (true) {
+                            const chunk = await reader.read();
+                            if (chunk.done) break;
+                            buffer += decoder.decode(chunk.value, { stream: true });
+                            const lines = buffer.split("\n");
+                            buffer = lines.pop() || "";
+                            for (const line of lines) {
+                                const trimmed = line.trim();
+                                if (!trimmed) continue;
+                                let evt = null;
+                                try { evt = JSON.parse(trimmed); } catch { continue; }
+                                if (evt.message) toast(evt.message, "info");
+                            }
+                        }
+                    }
+                    toast("Publication terminée ! 🎵", "success");
+                } catch (pubErr) {
+                    toast("Publication partielle : " + pubErr.message, "warning");
+                }
+                return;
+            }
+
+            if (o.status === "refunded") {
+                toast("Paiement remboursé automatiquement.", "warning");
+                return;
+            }
+
+            if (o.status === "failed") {
+                toast("Échec de la génération côté Suno.", "error");
+                return;
+            }
+
+            setTimeout(tick, 6000);
+        } catch (err) {
+            if (attempts >= MAX_ATTEMPTS) {
+                toast("Suivi de commande impossible : " + err.message, "error");
+                return;
+            }
+            setTimeout(tick, 8000);
+        }
+    }
+    tick();
+}
+
 document.addEventListener("DOMContentLoaded", init);
