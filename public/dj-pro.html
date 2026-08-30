@@ -85,24 +85,79 @@
 
         /* Responsive mobile */
         @media (max-width: 640px) {
-            /* Header navigation responsive */
-            nav .flex.items-center.gap-2,
-            nav .flex.items-center.gap-3 {
+            /* Header navigation responsive - compact icon-only via .nav-btn CSS */
+            nav {
                 flex-wrap: wrap;
-                gap: 0.5rem;
+                justify-content: center;
+                gap: 0.375rem;
             }
-            nav .flex.items-center.gap-2 a,
-            nav .flex.items-center.gap-2 button,
-            nav .flex.items-center.gap-3 a,
-            nav .flex.items-center.gap-3 button {
+            .nav-btn {
+                width: 40px;
+                height: 40px;
+                padding: 0;
+                border-radius: 0.75rem;
+                font-size: 0;
+                gap: 0;
+            }
+            .nav-btn .nav-label {
+                opacity: 0;
+                pointer-events: none;
+            }
+            .nav-btn i {
+                font-size: 1rem;
+            }
+            /* Tooltip on hover/focus */
+            .nav-btn:hover::after,
+            .nav-btn:focus-visible::after {
+                content: attr(title);
+                position: absolute;
+                bottom: calc(100% + 8px);
+                left: 50%;
+                transform: translateX(-50%);
+                background: #1e1b31;
+                color: #f1f5f9;
                 font-size: 0.75rem;
-                padding: 0.5rem 0.75rem;
+                font-weight: 600;
+                padding: 0.375rem 0.75rem;
+                border-radius: 0.5rem;
                 white-space: nowrap;
+                pointer-events: none;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+                z-index: 50;
+                border: 1px solid rgba(139,92,246,0.3);
             }
+            .nav-btn:hover::after {
+                display: block;
+            }
+            /* Mobile : show tooltip always on focus for accessibility */
+            .nav-btn:focus-visible::after {
+                display: block;
+            }
+
             /* DJ mode label hidden on very small screens if needed */
             #dj-mode-label {
                 display: none;
             }
+        }
+
+        /* ============================================================
+           HEADER NAVIGATION UNIFIÉE - SHARED ACROSS ALL PAGES
+           ============================================================ */
+        .nav-btn {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.375rem;
+            white-space: nowrap;
+            transition: all 0.2s ease;
+        }
+        .nav-btn i {
+            font-size: 0.875rem;
+            flex-shrink: 0;
+        }
+        .nav-btn .nav-label {
+            transition: opacity 0.2s ease;
         }
     </style>
 </head>
@@ -116,9 +171,11 @@
                 </div>
                 <div class="flex items-center gap-3">
                     <nav class="flex items-center gap-2">
-                        <a href="index.html" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white transition"><i class="fa-solid fa-sliders mr-1"></i>Studio</a>
-                        <a href="studio-pro.html" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white transition"><i class="fa-solid fa-wand-magic-sparkles mr-1"></i>Studio Pro</a>
-                        <button class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-gradient-to-r from-fuchsia-600 to-purple-600 text-white shadow-md shadow-fuchsia-600/25"><i class="fa-solid fa-record-vinyl mr-1"></i>DJ Pro</button>
+                        <a href="index.html" class="nav-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white transition" title="Studio"><i class="fa-solid fa-sliders"></i><span class="nav-label">Studio</span></a>
+                        <a href="studio-pro.html" class="nav-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white transition" title="Studio Pro"><i class="fa-solid fa-wand-magic-sparkles"></i><span class="nav-label">Studio Pro</span></a>
+                        <button class="nav-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-gradient-to-r from-fuchsia-600 to-purple-600 text-white shadow-md shadow-fuchsia-600/25" title="DJ Pro"><i class="fa-solid fa-record-vinyl"></i><span class="nav-label">DJ Pro</span></button>
+                        <a href="published.html" class="nav-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white transition" title="Historique"><i class="fa-solid fa-clock-rotate-left"></i><span class="nav-label">Historique</span></a>
+                        <a href="published.html" class="nav-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-gradient-to-r from-purple-500 via-fuchsia-500 to-rose-500 text-white hover:from-pink-400 hover:via-red-500 hover:to-orange-400 transition" title="Playlist"><i class="fa-solid fa-compact-disc"></i><span class="nav-label">Playlist</span></a>
                     </nav>
                     <span id="dj-mode-label" class="text-xs font-semibold uppercase tracking-wider text-slate-300">Mode Auto</span>
                     <button id="btn-toggle-mode" class="px-3 py-1.5 rounded-lg bg-fuchsia-600/80 hover:bg-fuchsia-500 text-white text-xs font-semibold transition">Basculer Auto/Manuel</button>

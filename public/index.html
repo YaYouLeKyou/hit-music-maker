@@ -135,18 +135,7 @@
             /* Bandeau d'actions du bloc éditeur : empilement propre */
             #view-studio .flex.items-center.justify-between.flex-wrap { row-gap: .6rem; }
 
-            /* Header : navigation responsive sur mobile */
-            header .flex.items-center.gap-2,
-            header nav.flex {
-                flex-wrap: wrap;
-                gap: 0.5rem;
-            }
-            header nav button,
-            header nav a {
-                font-size: 0.75rem;
-                padding: 0.5rem 0.75rem;
-                white-space: nowrap;
-            }
+            /* Header : navigation responsive sur mobile - compact icon-only via .nav-btn CSS above */
 
             /* Provider AI : stack select + button on mobile */
             #ai-providers-config .flex.items-center.gap-3 {
@@ -170,6 +159,90 @@
         @media (min-width: 641px) and (max-width: 1024px) {
             .panel-card { padding: 1.35rem; }
         }
+
+        /* ============================================================
+           HEADER NAVIGATION UNIFIÉE
+           ============================================================ */
+        .nav-btn {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.375rem;
+            white-space: nowrap;
+            transition: all 0.2s ease;
+        }
+        .nav-btn i {
+            font-size: 0.875rem;
+            flex-shrink: 0;
+        }
+        .nav-btn .nav-label {
+            transition: opacity 0.2s ease;
+        }
+
+        /* Mobile (< 640px) : boutons icônes uniquement avec tooltip */
+        @media (max-width: 639px) {
+            header nav {
+                flex-wrap: wrap;
+                justify-content: center;
+                gap: 0.375rem;
+            }
+            .nav-btn {
+                width: 40px;
+                height: 40px;
+                padding: 0;
+                border-radius: 0.75rem;
+                font-size: 0;
+                gap: 0;
+            }
+            .nav-btn .nav-label {
+                opacity: 0;
+                pointer-events: none;
+            }
+            .nav-btn i {
+                font-size: 1rem;
+            }
+            /* Tooltip on hover/focus */
+            .nav-btn:hover::after,
+            .nav-btn:focus-visible::after {
+                content: attr(title);
+                position: absolute;
+                bottom: calc(100% + 8px);
+                left: 50%;
+                transform: translateX(-50%);
+                background: #1e1b31;
+                color: #f1f5f9;
+                font-size: 0.75rem;
+                font-weight: 600;
+                padding: 0.375rem 0.75rem;
+                border-radius: 0.5rem;
+                white-space: nowrap;
+                pointer-events: none;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+                z-index: 50;
+                border: 1px solid rgba(139,92,246,0.3);
+            }
+            /* Show label on desktop */
+            @media (min-width: 640px) {
+                .nav-btn .nav-label {
+                    opacity: 1;
+                    pointer-events: auto;
+                }
+                .nav-btn:hover::after,
+                .nav-btn:focus-visible::after {
+                    display: none;
+                }
+            }
+            .nav-btn:hover::after {
+                display: block;
+            }
+        }
+        /* Mobile : show tooltip always on focus for accessibility */
+        @media (max-width: 639px) {
+            .nav-btn:focus-visible::after {
+                display: block;
+            }
+        }
     </style>
 </head>
 <body class="bg-night text-slate-100 min-h-screen font-sans antialiased">
@@ -188,23 +261,11 @@
 
             <!-- Navigation -->
             <nav class="flex items-center gap-2">
-                <button id="tab-studio" class="tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 bg-gradient-to-r from-fuchsia-600 to-purple-600 text-white shadow-md shadow-fuchsia-600/25 hover:from-fuchsia-500 hover:to-purple-500 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-400 focus-visible:ring-offset-2 focus-visible:ring-offset-night">
-                    <i class="fa-solid fa-sliders mr-1"></i> Studio
-                </button>
-                <button id="tab-studio-pro" class="tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-400/70">
-                    <i class="fa-solid fa-wand-magic-sparkles mr-1"></i>Studio Pro
-                </button>
-                <button id="tab-dj-pro" class="tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-400/70">
-                    <i class="fa-solid fa-record-vinyl mr-1"></i>DJ Pro
-                </button>
-                <button id="tab-history" class="tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-400/70">
-                    <i class="fa-solid fa-clock-rotate-left mr-1"></i> Historique
-                    <span id="history-count" class="ml-1 inline-flex items-center justify-center min-w-[20px] h-5 px-1 rounded-full bg-fuchsia-500 text-[11px] font-bold text-white shadow-sm">0</span>
-                </button>
-                <button id="tab-published" class="playlist-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 relative overflow-hidden bg-gradient-to-r from-purple-500 via-fuchsia-500 to-rose-500 text-white hover:from-pink-400 hover:via-red-500 hover:to-orange-400 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-400/70">
-                    <i class="fa-solid fa-compact-disc mr-1"></i>Playlist
-                    <div class="absolute inset-0 bg-gradient-to-r from-red-400 via-yellow-400 to-green-400 opacity-0 pointer-events-none transition-opacity duration-300 hover:opacity-20" id="disco-overlay"></div>
-                </button>
+                <button id="tab-studio" class="nav-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 bg-gradient-to-r from-fuchsia-600 to-purple-600 text-white shadow-md shadow-fuchsia-600/25 hover:from-fuchsia-500 hover:to-purple-500 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-400 focus-visible:ring-offset-2 focus-visible:ring-offset-night" title="Studio"><i class="fa-solid fa-sliders"></i><span class="nav-label">Studio</span></button>
+                <button id="tab-studio-pro" class="nav-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-400/70" title="Studio Pro"><i class="fa-solid fa-wand-magic-sparkles"></i><span class="nav-label">Studio Pro</span></button>
+                <button id="tab-dj-pro" class="nav-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-400/70" title="DJ Pro"><i class="fa-solid fa-record-vinyl"></i><span class="nav-label">DJ Pro</span></button>
+                <button id="tab-history" class="nav-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-400/70" title="Historique"><i class="fa-solid fa-clock-rotate-left"></i><span class="nav-label">Historique</span><span id="history-count" class="ml-1 inline-flex items-center justify-center min-w-[20px] h-5 px-1 rounded-full bg-fuchsia-500 text-[11px] font-bold text-white shadow-sm">0</span></button>
+                <button id="tab-published" class="nav-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 relative overflow-hidden bg-gradient-to-r from-purple-500 via-fuchsia-500 to-rose-500 text-white hover:from-pink-400 hover:via-red-500 hover:to-orange-400 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-400/70" title="Playlist"><i class="fa-solid fa-compact-disc"></i><span class="nav-label">Playlist</span><div class="absolute inset-0 bg-gradient-to-r from-red-400 via-yellow-400 to-green-400 opacity-0 pointer-events-none transition-opacity duration-300 hover:opacity-20" id="disco-overlay"></div></button>
             </nav>
 
             <!-- ============================================================
