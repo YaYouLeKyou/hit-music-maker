@@ -2495,6 +2495,35 @@ function init() {
         });
     }
 
+    // --- Hamburger menu (mobile) ---
+    const hamburgerBtn = $("hamburger-menu");
+    const navOverlay = $("nav-overlay");
+    const navDropdown = $("nav-dropdown");
+    if (hamburgerBtn && navOverlay && navDropdown) {
+        const toggleMenu = (open) => {
+            hamburgerBtn.classList.toggle("active", open);
+            navOverlay.classList.toggle("open", open);
+            navDropdown.classList.toggle("open", open);
+        };
+        hamburgerBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            toggleMenu(true);
+        });
+        navOverlay.addEventListener("click", () => toggleMenu(false));
+        // Close dropdown when clicking a menu item
+        navDropdown.querySelectorAll("button[data-tab], a").forEach((item) => {
+            item.addEventListener("click", () => {
+                toggleMenu(false);
+            });
+        });
+        // Close with Escape
+        document.addEventListener("keydown", (e) => {
+            if (e.key === "Escape" && navDropdown.classList.contains("open")) {
+                toggleMenu(false);
+            }
+        });
+    }
+
     // --- [FONCTIONNALITÉ COMMENTÉE] Clé API côté client ---
     // Décommentez ce bloc pour réactiver la gestion de la clé via l'interface.
     /*
