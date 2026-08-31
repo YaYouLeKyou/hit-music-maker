@@ -97,6 +97,26 @@ const STYLE_PRESETS = [
         label: "Chanson Française",
         key: "french chanson",
         value: "french chanson, 96 BPM, acoustic guitar, accordion, piano, poetic male vocal, timeless"
+    },
+    {
+        label: "Game Boy (8-bit Chiptune)",
+        key: "gameboy",
+        value: "chiptune 8-bit gameboy, 120 BPM, square wave synths, triangle wave bass, noise channel percussion, lo-fi retro, nostalgic video game atmosphere, instrumental"
+    },
+    {
+        label: "Mega Drive (16-bit Sega)",
+        key: "megadrive",
+        value: "16-bit megadrive genesis, 130 BPM, fm synthesis, pulse wave leads, fast arpeggios, driving bass, retro console, energetic, instrumental"
+    },
+    {
+        label: "Super Nintendo (16-bit SNES)",
+        key: "supernintendo",
+        value: "16-bit super nintendo snes, 110 BPM, sample-based synths, warm pads, melodic leads, epic rpg atmosphere, nostalgic, instrumental"
+    },
+    {
+        label: "Mix Toutes Consoles (8-16bit)",
+        key: "mix-console",
+        value: "retro console mix 8-16bit, 120 BPM, chiptune and fm synthesis blend, gameboy square waves, megadrive fm leads, snes pads, nostalgic video game vibe, instrumental"
     }
 ];
 
@@ -2225,20 +2245,24 @@ function getAllGenres() {
 }
 
 /** Style-to-genre mapping for artist filtering */
-const STYLE_GENRE_MAP = {
-    "afro-pop": ["Afro", "Afro-trap", "R&B", "Soul", "Reggae", "Dub", "Afrobeat", "Zouk"],
-    "synthwave": ["Synthwave", "Electronic", "Electro", "Synth", "Retrowave", "Electronic"],
-    "acoustic pop-rock": ["Pop", "Rock", "Acoustic", "Indie", "Folk"],
-    "french drill": ["Drill", "Trap", "Rap"],
-    "piano ballad": ["Ballad", "Piano", "Acoustic", "Soul", "R&B"],
-    "edm": ["EDM", "House", "Electronic", "Dance", "Electro", "Techno", "Trance"],
-    "reggaeton": ["Reggaeton", "Latin", "Latino", "Latine"],
-    "classic soul": ["Soul", "R&B", "Funk", "Motown", "Gospel"],
-    "dub reggae": ["Reggae", "Dub", "Dancehall"],
-    "heavy metal": ["Metal", "Hard Rock", "Rock"],
-    "bossa nova": ["Bossa Nova", "Jazz", "Latin", "Brasil", "Latino"],
-    "french chanson": ["Chanson", "Variété", "Pop"]
-};
+    const STYLE_GENRE_MAP = {
+        "afro-pop": ["Afro", "Afro-trap", "R&B", "Soul", "Reggae", "Dub", "Afrobeat", "Zouk"],
+        "synthwave": ["Synthwave", "Electronic", "Electro", "Synth", "Retrowave", "Electronic"],
+        "acoustic pop-rock": ["Pop", "Rock", "Acoustic", "Indie", "Folk"],
+        "french drill": ["Drill", "Trap", "Rap"],
+        "piano ballad": ["Ballad", "Piano", "Acoustic", "Soul", "R&B"],
+        "edm": ["EDM", "House", "Electronic", "Dance", "Electro", "Techno", "Trance"],
+        "reggaeton": ["Reggaeton", "Latin", "Latino", "Latine"],
+        "classic soul": ["Soul", "R&B", "Funk", "Motown", "Gospel"],
+        "dub reggae": ["Reggae", "Dub", "Dancehall"],
+        "heavy metal": ["Metal", "Hard Rock", "Rock"],
+        "bossa nova": ["Bossa Nova", "Jazz", "Latin", "Brasil", "Latino"],
+        "french chanson": ["Chanson", "Variété", "Pop"],
+        "gameboy": ["Chiptune", "8-bit", "Video Game", "Retro", "Electronic", "Nintendo"],
+        "megadrive": ["Chiptune", "16-bit", "Video Game", "Retro", "Electronic", "Sega"],
+        "supernintendo": ["Chiptune", "16-bit", "Video Game", "Retro", "Electronic", "Nintendo"],
+        "mix-console": ["Chiptune", "Retro", "Video Game", "Electronic", "Nintendo", "Sega", "Game Boy"]
+    };
 
 /**
  * Filter and populate artist select based on selected style
@@ -2263,7 +2287,8 @@ function populateArtistSelect(filterStyle = null) {
     const groups = {
         "Français / Francophonie": artistsToShow.filter(a => a.language === "Français"),
         "US / UK": artistsToShow.filter(a => a.language === "Anglais"),
-        "Latino": artistsToShow.filter(a => a.language === "Espagnol")
+        "Latino": artistsToShow.filter(a => a.language === "Espagnol"),
+        "Rétro / Chiptune (8-16bit)": artistsToShow.filter(a => a.language === "Instrumental" && /chiptune|retro|gameboy|megadrive|supernintendo|console/i.test(a.genre))
     };
 
     for (const [groupLabel, artists] of Object.entries(groups)) {

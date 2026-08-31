@@ -2598,6 +2598,49 @@ const ARTISTS_DATABASE = [
         prompt_audio_preset: "Gounod French opera, 80 BPM, romantic orchestra, bell chimes, cor anglais melodies, operatic voices, sweeping love themes, radio-ready romantic mix, wide stereo image",
         flow_signature: "Romantic operatic delivery, bell-like melodic phrasing, French romantic elegance, soaring love themes, lyrical",
     },
+    // ============================================================
+    // RETRO CONSOLE (4 artistes - chiptune / 8-16bit)
+    // ============================================================
+    {
+        name: "Game Boy 8-bit",
+        genre: "Chiptune / 8-bit Nintendo",
+        bpm_range: "100-140",
+        instruments: "Square wave synths, triangle wave bass, noise channel percussion, simple waveform melodies",
+        drum_style: "Lo-fi chiptune percussion, noise channel drums, simple step sequencer patterns, 8-bit groove",
+        language: "Instrumental",
+        prompt_audio_preset: "chiptune 8-bit gameboy, 120 BPM, square wave synths, triangle wave bass, noise channel percussion, lo-fi retro, nostalgic video game atmosphere, instrumental",
+        flow_signature: "Minimalist chiptune melodies, catchy square wave hooks, retro game nostalgia, lo-fi bleeps"
+    },
+    {
+        name: "Mega Drive 16-bit",
+        genre: "Chiptune / 16-bit Sega",
+        bpm_range: "120-150",
+        instruments: "FM synthesis, pulse wave leads, fast arpeggios, driving bass, metallic percussion",
+        drum_style: "FM-synth drum kit, punchy kicks, metallic snare, fast hi-hat rolls, energetic 16-bit groove",
+        language: "Instrumental",
+        prompt_audio_preset: "16-bit megadrive genesis, 130 BPM, fm synthesis, pulse wave leads, fast arpeggios, driving bass, retro console, energetic, instrumental",
+        flow_signature: "FM synth leads, energetic arpeggios, metallic percussion, action-packed 90s console vibe"
+    },
+    {
+        name: "Super Nintendo 16-bit",
+        genre: "Chiptune / 16-bit SNES",
+        bpm_range: "90-130",
+        instruments: "Sample-based synths, warm pads, melodic leads, brass stabs, lush strings samples",
+        drum_style: "Sampled 16-bit drums, warm kick, crisp snare, melodic percussion, cinematic groove",
+        language: "Instrumental",
+        prompt_audio_preset: "16-bit super nintendo snes, 110 BPM, sample-based synths, warm pads, melodic leads, epic rpg atmosphere, nostalgic, instrumental",
+        flow_signature: "Cinematic sample-based leads, warm brass stabs, epic RPG atmosphere, nostalgic melodic themes"
+    },
+    {
+        name: "Mix Toutes Consoles",
+        genre: "Chiptune / Retro Mix",
+        bpm_range: "100-140",
+        instruments: "Square waves, FM synthesis, sample-based synths, mix of 8-bit and 16-bit sounds",
+        drum_style: "Hybrid chiptune percussion, 8-bit noise + 16-bit samples, mixed retro groove",
+        language: "Instrumental",
+        prompt_audio_preset: "retro console mix 8-16bit, 120 BPM, chiptune and fm synthesis blend, gameboy square waves, megadrive fm leads, snes pads, nostalgic video game vibe, instrumental",
+        flow_signature: "Hybrid retro blend, mixes 8-bit chiptune with 16-bit FM/samples, nostalgic gaming mashup"
+    },
 ];
 
 // Export CommonJS pour utilisation côté serveur (Node.js)
